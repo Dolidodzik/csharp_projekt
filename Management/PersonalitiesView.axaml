@@ -1,0 +1,67 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:PokerApp"
+             x:Class="PokerApp.PersonalitiesView"
+             Background="#111111">
+    <Grid RowDefinitions="Auto,*" Margin="16" RowSpacing="12">
+        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+            <Button Grid.Column="0" Content="Back" Click="OnBackClick" Padding="16,8" />
+            <TextBlock Grid.Column="1"
+                       Text="Manage LLM agent personalities (SQLite)"
+                       VerticalAlignment="Center"
+                       Foreground="#e8f0fa"
+                       FontSize="18"
+                       FontWeight="SemiBold" />
+            <TextBlock x:Name="ErrorText"
+                       Grid.Column="2"
+                       Foreground="#ff8a8a"
+                       VerticalAlignment="Center"
+                       TextWrapping="Wrap"
+                       MaxWidth="360" />
+        </Grid>
+
+        <Grid Grid.Row="1" ColumnDefinitions="280,*" ColumnSpacing="16">
+            <DockPanel Grid.Column="0" LastChildFill="True">
+                <StackPanel DockPanel.Dock="Bottom" Orientation="Vertical" Spacing="8" Margin="0,8,0,0">
+                    <Button Content="New" Click="OnNewClick" HorizontalAlignment="Stretch" />
+                    <Button Content="Delete" Click="OnDeleteClick" HorizontalAlignment="Stretch" />
+                </StackPanel>
+                <ListBox x:Name="PersonalitiesList"
+                         SelectionChanged="OnListSelectionChanged"
+                         Background="#1a2230"
+                         Foreground="#e8f0fa"
+                         BorderBrush="#3a4a5e"
+                         BorderThickness="1">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="local:LlmAgentPersonality">
+                            <TextBlock Text="{Binding Name}" />
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+
+            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Name" Foreground="#b8c8dc" />
+                    <TextBox x:Name="NameEditor"
+                             PlaceholderText="Personality name"
+                             Background="#1a2230"
+                             Foreground="#e8f0fa"
+                             BorderBrush="#3a4a5e" />
+                    <TextBlock Text="Personality description" Foreground="#b8c8dc" />
+                    <TextBox x:Name="DescriptionEditor"
+                             AcceptsReturn="True"
+                             TextWrapping="Wrap"
+                             MinHeight="260"
+                             PlaceholderText="Long text…"
+                             Background="#1a2230"
+                             Foreground="#e8f0fa"
+                             BorderBrush="#3a4a5e" />
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button Content="Save" Click="OnSaveClick" Padding="20,10" />
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</UserControl>

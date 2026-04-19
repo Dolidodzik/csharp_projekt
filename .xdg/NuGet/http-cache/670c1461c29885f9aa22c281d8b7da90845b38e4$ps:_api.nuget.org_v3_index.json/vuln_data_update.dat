@@ -1,0 +1,1 @@
+{"zio":[{"url":"https://github.com/advisories/GHSA-h39g-6x3c-7fq9","severity":0,"versions":"(, 0.22.1]"}],"opentelemetry.exporter.jaeger":[{"url":"https://github.com/advisories/GHSA-38h3-2333-qx47","severity":1,"versions":"(, 1.6.0-rc.1]"}],"mailkit":[{"url":"https://github.com/advisories/GHSA-9j88-vvj5-vhgr","severity":1,"versions":"(, 4.16.0)"}]}

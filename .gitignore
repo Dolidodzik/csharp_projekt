@@ -16,11 +16,6 @@ bld/
 [Bb]in/
 [Oo]bj/
 [Ll]og/
-*.db
-*.db-shm
-*.db-wal
-Database/llm_personalities.sqlite
-Database/llm_personalities.sqlite-journal
 *.DotSettings.user
 TestResults/
 coverage*.json

@@ -83,7 +83,7 @@ public sealed class LlmBotPlayer : BasePlayer
     public override PlayerAction GetTurn(IGetTurnContext context)
     {
         _ui.SetCurrentTurn(Name);
-        var possible = BuildPossibleActions(context);
+        var possible = BuildPossibleActions(context, _bigBlind);
 
         if (possible.HasSingleLegalAction)
             return FinalizeAction(context, possible.SingleLegalAction, null, null);
@@ -92,6 +92,7 @@ public sealed class LlmBotPlayer : BasePlayer
         var userPrompt = LlmPrompts.BuildUserPrompt(
             context,
             _bigBlind,
+            Name,
             ownCards,
             _currentBoard,
             _handHistoryByStreet.ToDictionary(
@@ -194,7 +195,7 @@ public sealed class LlmBotPlayer : BasePlayer
 
     private static object CardJson(Card c) => new { rank = c.Type.ToString(), suit = c.Suit.ToString() };
 
-    private static PossibleActions BuildPossibleActions(IGetTurnContext context)
+    private static PossibleActions BuildPossibleActions(IGetTurnContext context, int bigBlind)
     {
         var maxExtraRaise = Math.Max(0, context.MoneyLeft - context.MoneyToCall);
         var canRaise = context.CanRaise && maxExtraRaise > 0;
@@ -212,10 +213,10 @@ public sealed class LlmBotPlayer : BasePlayer
         var raiseMap = new Dictionary<string, int>(StringComparer.Ordinal);
         if (canRaise)
         {
-            foreach (var (code, value) in BuildRaiseOptions(minRaise, maxExtraRaise))
+            foreach (var (code, value) in BuildRaiseOptions(minRaise, maxExtraRaise, bigBlind))
             {
                 raiseMap[code] = value;
-                lines.Add($"{code} ({value})");
+                lines.Add($"{code} ({value}, {FormatRaisePercentOfPot(value, context.CurrentPot)})");
             }
         }
 
@@ -257,10 +258,10 @@ public sealed class LlmBotPlayer : BasePlayer
         return PlayerAction.CheckOrCall();
     }
 
-    private static IReadOnlyList<(string code, int value)> BuildRaiseOptions(int minRaise, int maxRaise)
+    private static IReadOnlyList<(string code, int value)> BuildRaiseOptions(int minRaise, int maxRaise, int bigBlind)
     {
         if (maxRaise <= minRaise)
-            return new List<(string, int)> { ("RAISE_MIN", minRaise), ("RAISE_ALL_IN", maxRaise) };
+            return new List<(string, int)> { ("RAISE_MIN", RoundToBigBlind(minRaise, minRaise, maxRaise, bigBlind)), ("RAISE_ALL_IN", maxRaise) };
 
         var steps = new[]
         {
@@ -279,9 +280,9 @@ public sealed class LlmBotPlayer : BasePlayer
         foreach (var (code, ratio) in steps)
         {
             var value = minRaise + (int)Math.Round((maxRaise - minRaise) * ratio);
-            value = Math.Clamp(value, minRaise, maxRaise);
+            value = RoundToBigBlind(value, minRaise, maxRaise, bigBlind);
             if (value <= last)
-                value = Math.Min(maxRaise, last + 1);
+                value = RoundToBigBlind(last + 1, minRaise, maxRaise, bigBlind);
             if (value > maxRaise)
                 continue;
             if (result.Count > 0 && result[^1].Item2 == value)
@@ -291,11 +292,28 @@ public sealed class LlmBotPlayer : BasePlayer
         }
 
         if (result.Count == 0 || result[0].Item2 != minRaise)
-            result.Insert(0, ("RAISE_MIN", minRaise));
+            result.Insert(0, ("RAISE_MIN", RoundToBigBlind(minRaise, minRaise, maxRaise, bigBlind)));
         if (result[^1].Item2 != maxRaise)
             result.Add(("RAISE_ALL_IN", maxRaise));
 
         return result;
+    }
+
+    private static int RoundToBigBlind(int value, int minRaise, int maxRaise, int bigBlind)
+    {
+        var step = Math.Max(1, bigBlind);
+        var rounded = (int)Math.Round(value / (double)step, MidpointRounding.AwayFromZero) * step;
+        if (rounded < minRaise)
+            rounded += step;
+        return Math.Clamp(rounded, minRaise, maxRaise);
+    }
+
+    private static string FormatRaisePercentOfPot(int raiseAmount, int pot)
+    {
+        if (pot <= 0)
+            return "N/A POT";
+        var pct = (int)Math.Round(raiseAmount * 100.0 / pot, MidpointRounding.AwayFromZero);
+        return $"{pct}% POT";
     }
 
     private static IReadOnlyList<Card> SnapshotCards(IEnumerable<Card> source)

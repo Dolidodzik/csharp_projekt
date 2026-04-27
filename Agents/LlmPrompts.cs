@@ -6,7 +6,7 @@ namespace PokerApp;
 public static class LlmPrompts
 {
     private const string BaseSystemPrompt =
-        "You are a Texas Hold'em decision engine. Answer briefly, then output the action code as the LAST line.";
+        "You are a Texas Hold'em decision engine. IF PERSONALITY IS PROVIDED, MAKE IT REFLECT IN YOUR DECISIONS, AND IN YOUR REASONING. Answer briefly, then output the action code as the LAST line.";
 
     public static string BuildSystemPrompt(LlmPersonalitySnapshot? personality)
     {
@@ -27,6 +27,7 @@ public static class LlmPrompts
     public static string BuildUserPrompt(
         IGetTurnContext context,
         int bigBlind,
+        string heroName,
         IReadOnlyList<Card> ownCards,
         IReadOnlyList<Card> boardCards,
         IReadOnlyDictionary<string, IReadOnlyList<string>> handHistoryByStreet,
@@ -45,6 +46,7 @@ public static class LlmPrompts
         return $"""
 TASK: Make ONE decision in your last line of answer, choose exact code from the possible actions below. Be brief and concise.
 DO NOT WRITE FULL SENTENCES. DO WRITE JUST SHORT ANSWERS.
+IF PERSONALITY IS PROVIDED, MAKE IT REFLECT IN YOUR DECISIONS, AND IN YOUR REASONING.
 
 LEXICON AND RULES:
 {lexicon}
@@ -62,7 +64,7 @@ To call: {context.MoneyToCall}
 Big blind: {bigBlind}
 Min raise: {context.MinRaise}
 action history:
-{FormatStreetHistory(handHistoryByStreet)}{factsSection}
+{FormatStreetHistory(handHistoryByStreet, heroName)}{factsSection}
 
 QUESTIONS:
 {questions}
@@ -74,7 +76,7 @@ OUTPUT FORMAT:
 
 <ANSWERS TO QUESTIONS (just answer, dont re-write questions)>
 
-General reasoning, final thoughts:
+General reasoning, thoughts:
 - ...
 - ...
 - ...
@@ -121,6 +123,7 @@ Decision: <action code>
 - with straights or flushes be careful: even if you hit, can you be beaten by a better straight, flush, or full house?
 - if board is paired, it means 2 cards of the same rank lie on the board - for example two queens. Only then can fullhouses happen, so straights and flushes become vulnerable.
 - you can have 3 of a kind even when the board is not paired if you have a pocket pair
+- if for example board is paired and you have just a pair as "your best hand now", it means you have nothing, you just have what everyone else has.
 """;
 
     private const string UniversalQuestions = """
@@ -143,12 +146,13 @@ Decision: <action code>
 0.4 - What are you drawing to?
 """;
 
-    private static string FormatStreetHistory(IReadOnlyDictionary<string, IReadOnlyList<string>> byStreet)
+    private static string FormatStreetHistory(IReadOnlyDictionary<string, IReadOnlyList<string>> byStreet, string heroName)
     {
         if (byStreet.Count == 0)
             return "none";
 
         var ordered = new[] { "Pre-Flop", "Flop", "Turn", "River" };
+        var aliases = BuildPlayerAliases(byStreet, heroName);
         var lines = new List<string>();
         foreach (var street in ordered)
         {
@@ -156,12 +160,12 @@ Decision: <action code>
                 continue;
             lines.Add($"{street}:");
             foreach (var action in actions)
-                lines.Add(FormatHistoryActionLine(action));
+                lines.Add(FormatHistoryActionLine(action, aliases));
         }
         return lines.Count == 0 ? "none" : string.Join('\n', lines);
     }
 
-    private static string FormatHistoryActionLine(string line)
+    private static string FormatHistoryActionLine(string line, IReadOnlyDictionary<string, string> aliases)
     {
         var trimmed = line.TrimStart();
         var colon = trimmed.IndexOf(':');
@@ -169,6 +173,35 @@ Decision: <action code>
             return $"  {line}";
         var player = trimmed[..colon].TrimEnd();
         var rest = trimmed[colon..];
-        return $"  {FormatNameForLlm(player)}{rest}";
+        if (!aliases.TryGetValue(player, out var alias))
+            alias = FormatNameForLlm(player);
+        return $"  {alias}{rest}";
+    }
+
+    private static Dictionary<string, string> BuildPlayerAliases(IReadOnlyDictionary<string, IReadOnlyList<string>> byStreet, string heroName)
+    {
+        var aliases = new Dictionary<string, string>(StringComparer.Ordinal);
+        var ordered = new[] { "Pre-Flop", "Flop", "Turn", "River" };
+        var opponentIndex = 1;
+        foreach (var street in ordered)
+        {
+            if (!byStreet.TryGetValue(street, out var actions))
+                continue;
+            foreach (var action in actions)
+            {
+                var trimmed = action.TrimStart();
+                var colon = trimmed.IndexOf(':');
+                if (colon <= 0)
+                    continue;
+                var player = trimmed[..colon].TrimEnd();
+                if (aliases.ContainsKey(player))
+                    continue;
+                if (string.Equals(player, heroName, StringComparison.Ordinal))
+                    aliases[player] = "US";
+                else
+                    aliases[player] = $"oponent {opponentIndex++}";
+            }
+        }
+        return aliases;
     }
 }

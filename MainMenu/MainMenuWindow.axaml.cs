@@ -40,8 +40,10 @@ public partial class MainMenuWindow : Window
     private string? _pendingReplayJson;
     private bool _handSaveInFlight;
     private bool _showingReplayHandResult;
+    private bool _abortingGame;
     private DispatcherTimer? _seriesSetupPrefsSaveDebounce;
     private bool _applyingSeriesSetupPrefs;
+    private int? _activeSeriesId;
 
     public MainMenuWindow()
     {
@@ -66,7 +68,8 @@ public partial class MainMenuWindow : Window
         RefreshPersonalityComboBoxes();
         RefreshPresetComboBoxes();
         LoadMenuBackground();
-        HideSmallPotReplaysCheckBox.Content = $"Hide hands with max pot under {GameConstants.HighPotChipsThreshold}";
+        HideSmallPotReplaysCheckBox.Content = $"Ukryj ręce z pulą max poniżej {GameConstants.HighPotChipsThreshold}";
+        ExportIncludeHandHistoryCheckBox.IsChecked = true;
         WireSeriesSetupPreferencesAutosave();
         Closed += (_, _) => _menuBackgroundBitmap?.Dispose();
     }
@@ -383,10 +386,14 @@ public partial class MainMenuWindow : Window
         ReplayErrorTextBlock.Text = string.Empty;
         ReplaySourceComboBox.SelectedIndex = 0;
         UpdateReplayPanelVisibility();
-        await LoadStandaloneReplaysAsync();
-        await LoadSeriesListAsync();
+        await LoadActiveReplayPanelAsync();
         SetOverlay(setupVisible: false, winnerVisible: false, handVisible: false, replayListVisible: true);
     }
+
+    private Task LoadActiveReplayPanelAsync() =>
+        ReplaySourceComboBox.SelectedIndex <= 0
+            ? LoadStandaloneReplaysAsync()
+            : LoadSeriesListAsync();
 
     private void UpdateReplayPanelVisibility()
     {
@@ -430,24 +437,40 @@ public partial class MainMenuWindow : Window
         SetOverlay(setupVisible: false, winnerVisible: false, handVisible: false, replayListVisible: false);
     }
 
-    private void OnOpenReplayPressed(object? sender, PointerPressedEventArgs e)
+    private async void OnOpenReplayPressed(object? sender, PointerPressedEventArgs e)
     {
         ReplayErrorTextBlock.Text = string.Empty;
-        string? json = null;
+        int? handId = null;
         if (StandaloneReplayDock.IsVisible)
         {
             if (ReplayHandsListBox.SelectedItem is StandaloneReplayListItem s)
-                json = s.ReplayJson;
+                handId = s.Id;
         }
-        else
+        else if (ReplaySeriesHandsListBox.SelectedItem is SeriesHandReplayItem h)
         {
-            if (ReplaySeriesHandsListBox.SelectedItem is SeriesHandReplayItem h)
-                json = h.ReplayJson;
+            handId = h.Id;
         }
 
-        if (string.IsNullOrEmpty(json))
+        if (handId is null)
         {
-            ReplayErrorTextBlock.Text = "Select a replay first.";
+            ReplayErrorTextBlock.Text = "Wybierz powtórkę.";
+            return;
+        }
+
+        string json;
+        try
+        {
+            json = await HandPersistence.LoadHandHistoryJsonAsync(handId.Value);
+        }
+        catch
+        {
+            ReplayErrorTextBlock.Text = "Nie udało się wczytać powtórki.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            ReplayErrorTextBlock.Text = "Powtórka jest pusta.";
             return;
         }
 
@@ -486,19 +509,19 @@ public partial class MainMenuWindow : Window
 
         if (!int.TryParse(BuyInTextBox.Text, out var buyIn) || buyIn <= 0)
         {
-            SetupErrorTextBlock.Text = "Buy-in must be a positive number.";
+            SetupErrorTextBlock.Text = "Buy-in musi być dodatni.";
             return;
         }
 
         if (!int.TryParse(SmallBlindTextBox.Text, out var smallBlind) || smallBlind <= 0)
         {
-            SetupErrorTextBlock.Text = "Small blind must be a positive number.";
+            SetupErrorTextBlock.Text = "Mały blind musi być dodatni.";
             return;
         }
 
         if (smallBlind * 20 > buyIn)
         {
-            SetupErrorTextBlock.Text = "Small blind must be at least 20x smaller than buy-in.";
+            SetupErrorTextBlock.Text = "Mały blind min. 20x mniejszy od buy-in.";
             return;
         }
 
@@ -508,7 +531,7 @@ public partial class MainMenuWindow : Window
         {
             if (botCount < 2 || botCount > 6)
             {
-                SetupErrorTextBlock.Text = "Choose between 2 and 6 bots.";
+                SetupErrorTextBlock.Text = "Wybierz 2–6 botów.";
                 return;
             }
         }
@@ -516,7 +539,7 @@ public partial class MainMenuWindow : Window
         {
             if (botCount < 1 || botCount > 3)
             {
-                SetupErrorTextBlock.Text = "Choose between 1 and 3 bots.";
+                SetupErrorTextBlock.Text = "Wybierz 1–3 botów.";
                 return;
             }
         }
@@ -528,7 +551,7 @@ public partial class MainMenuWindow : Window
             var botName = GetBotNameForIndex(i, botType);
             if (string.IsNullOrWhiteSpace(botName))
             {
-                SetupErrorTextBlock.Text = $"Bot {i + 1} name cannot be empty.";
+                SetupErrorTextBlock.Text = $"Bot {i + 1}: podaj nazwę.";
                 return;
             }
 
@@ -536,7 +559,7 @@ public partial class MainMenuWindow : Window
             var preset = GetOpenAiPresetSnapshotForBotIndex(i);
             if (botType == BotType.LlmBotPlayer && preset is null)
             {
-                SetupErrorTextBlock.Text = $"Bot {i + 1} needs an OpenAI preset.";
+                SetupErrorTextBlock.Text = $"Bot {i + 1}: wybierz preset OpenAI.";
                 return;
             }
 
@@ -548,16 +571,17 @@ public partial class MainMenuWindow : Window
             var sname = SeriesNameTextBox.Text?.Trim() ?? string.Empty;
             if (string.IsNullOrWhiteSpace(sname))
             {
-                SetupErrorTextBlock.Text = "Series name is required.";
+                SetupErrorTextBlock.Text = "Podaj nazwę serii.";
                 return;
             }
 
             if (!int.TryParse(SeriesTournamentCountTextBox.Text, out var tCount) || tCount < 1)
             {
-                SetupErrorTextBlock.Text = "Tournament count must be at least 1.";
+                SetupErrorTextBlock.Text = "Min. 1 turniej w serii.";
                 return;
             }
 
+            _abortingGame = false;
             _gameCts = new CancellationTokenSource();
             SetOverlay(setupVisible: false, winnerVisible: false, handVisible: false);
             try
@@ -580,6 +604,7 @@ public partial class MainMenuWindow : Window
         var config = new GameSetupConfig(buyIn, smallBlind, bots, LlmTemperature: 0, SpectatorSeriesMode: false);
 
         _activeGameConfig = config;
+        _abortingGame = false;
         _gameCts = new CancellationTokenSource();
         _gameView = new MainWindow(config);
         _gameView.TournamentFinished += OnTournamentFinished;
@@ -623,6 +648,10 @@ public partial class MainMenuWindow : Window
             seriesId = series.Id;
         }
 
+        _activeSeriesId = seriesId;
+        var seriesCancelled = false;
+        try
+        {
         for (var t = 0; t < tournamentCount; t++)
         {
             ct.ThrowIfCancellationRequested();
@@ -661,6 +690,7 @@ public partial class MainMenuWindow : Window
             catch (OperationCanceledException)
             {
                 await HandPersistence.DiscardSeriesTournamentAsync(stId, CancellationToken.None);
+                seriesCancelled = true;
                 throw;
             }
             finally
@@ -680,6 +710,27 @@ public partial class MainMenuWindow : Window
         MenuLayer.IsVisible = true;
         _activeGameConfig = null;
         await TournamentSeriesStats.RecomputeAndSaveAsync(seriesId, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            seriesCancelled = true;
+            throw;
+        }
+        finally
+        {
+            if (seriesCancelled)
+            {
+                try
+                {
+                    await TournamentSeriesStats.RecomputeAndSaveAsync(seriesId, CancellationToken.None);
+                }
+                catch
+                {
+                }
+            }
+
+            _activeSeriesId = null;
+        }
     }
 
     private void OnSeriesInnerTournamentFinished(string _) { }
@@ -693,7 +744,7 @@ public partial class MainMenuWindow : Window
         GameSetupConfig cfg,
         CancellationToken ct)
     {
-        var handName = $"T{tournamentIndexZeroBased + 1} H{summary.HandNumber}";
+        var handName = $"Turniej {tournamentIndexZeroBased + 1}, Rozdanie {summary.HandNumber}";
         var seats = BuildSeatRowsForSave(cfg);
         return HandPersistence.SaveSeriesHandAsync(handName, json, seats, seriesId, stId, ct);
     }
@@ -713,8 +764,10 @@ public partial class MainMenuWindow : Window
         MenuLayer.IsVisible = true;
         SetOverlay(setupVisible: false, winnerVisible: false, handVisible: false, exitConfirmVisible: false);
         _activeGameConfig = null;
+        _activeSeriesId = null;
         _pendingReplayJson = null;
         _showingReplayHandResult = false;
+        _abortingGame = false;
     }
 
     private void OnGameExitToMenuRequested()
@@ -728,7 +781,14 @@ public partial class MainMenuWindow : Window
     private void OnExitConfirmYesPressed(object? sender, PointerPressedEventArgs e)
     {
         SetOverlay(setupVisible: false, winnerVisible: false, handVisible: false, exitConfirmVisible: false);
+        _abortingGame = true;
+        _handContinueTcs?.TrySetResult(true);
+        _handContinueTcs = null;
         _gameCts?.Cancel();
+        if (_activeSeriesId.HasValue)
+            FinishAbortedSeriesToMenu();
+        else
+            FinishAbortedGameToMenu();
     }
 
     private void FinishAbortedGameToMenu()
@@ -749,11 +809,12 @@ public partial class MainMenuWindow : Window
         _activeGameConfig = null;
         _pendingReplayJson = null;
         _showingReplayHandResult = false;
+        _abortingGame = false;
     }
 
     private void OnTournamentFinished(string winnerName)
     {
-        WinnerText.Text = $"Winner: {winnerName}";
+        WinnerText.Text = $"Zwycięzca: {winnerName}";
         SetOverlay(setupVisible: false, winnerVisible: true, handVisible: false);
     }
 
@@ -762,7 +823,6 @@ public partial class MainMenuWindow : Window
         if (_gameView is not null)
         {
             _gameView.TournamentFinished -= OnTournamentFinished;
-            _gameView.ReplayHandFinished -= OnReplayHandFinished;
         }
         _gameView = null;
         GameHost.Content = null;
@@ -825,9 +885,9 @@ public partial class MainMenuWindow : Window
     private void RefreshBigBlindInfo()
     {
         if (int.TryParse(SmallBlindTextBox.Text, out var smallBlind) && smallBlind > 0)
-            BigBlindInfoText.Text = $"{smallBlind * 2} (always x2 small blind)";
+            BigBlindInfoText.Text = $"{smallBlind * 2} (zawsze x2 mały blind)";
         else
-            BigBlindInfoText.Text = "Invalid small blind value";
+            BigBlindInfoText.Text = "Błąd małego blinda";
     }
 
     private void RefreshBotRows()
@@ -952,10 +1012,12 @@ public partial class MainMenuWindow : Window
 
     private async Task OnHandFinishedAsync(HandSummary summary, string replayJson, CancellationToken cancellationToken)
     {
+        if (_abortingGame)
+            return;
         _showingReplayHandResult = false;
         var winners = string.Join(", ", summary.Winners);
-        HandWinnerText.Text = $"Winner(s): {winners}";
-        HandResultActionText.Text = "Next";
+        HandWinnerText.Text = $"Zwycięzca: {winners}";
+        HandResultActionText.Text = "Dalej";
         _pendingReplayJson = replayJson;
         HandSaveRow.IsVisible = true;
         ResetHandSaveUi();
@@ -992,7 +1054,7 @@ public partial class MainMenuWindow : Window
         var handName = HandNameTextBox.Text?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(handName))
         {
-            HandSaveErrorTextBlock.Text = "Hand name is required.";
+            HandSaveErrorTextBlock.Text = "Podaj nazwę rozdania.";
             SaveHandCheckBox.IsChecked = false;
             return;
         }
@@ -1123,14 +1185,8 @@ public partial class MainMenuWindow : Window
         return null;
     }
 
-    private BotType GetBotTypeForIndex(int botIndex)
-    {
-        var combo = BotTypeComboForIndex(botIndex);
-        var content = (combo.SelectedItem as ComboBoxItem)?.Content?.ToString();
-        return string.Equals(content, "LlmBotPlayer", StringComparison.Ordinal)
-            ? BotType.LlmBotPlayer
-            : BotType.RandomBotPlayer;
-    }
+    private BotType GetBotTypeForIndex(int botIndex) =>
+        BotTypeComboForIndex(botIndex).SelectedIndex == 1 ? BotType.LlmBotPlayer : BotType.RandomBotPlayer;
 
     private string GetBotNameForIndex(int botIndex, BotType type)
     {
@@ -1188,27 +1244,27 @@ public partial class MainMenuWindow : Window
         PokerDbBootstrap.EnsureInitialized();
         var hide = HideSmallPotReplaysCheckBox.IsChecked == true;
         await using var db = PokerDbBootstrap.CreateContext();
-        var raw = await db.SavedHands
+        var query = db.SavedHands
             .AsNoTracking()
-            .Where(h => h.TournamentSeriesId == null)
+            .Where(h => h.TournamentSeriesId == null);
+        if (hide)
+            query = query.Where(h => h.MaxPot >= GameConstants.HighPotChipsThreshold);
+        var raw = await query
             .OrderByDescending(h => h.HandTimeIso)
+            .Select(h => new { h.Id, h.HandName, h.HandTimeIso, h.MaxPot })
             .ToListAsync();
-        var items = new List<StandaloneReplayListItem>();
-        foreach (var h in raw)
+        var items = raw.Select(h =>
         {
-            if (hide && h.MaxPot < GameConstants.HighPotChipsThreshold)
-                continue;
-            var bg = h.MaxPot > GameConstants.HighPotChipsThreshold ? "#2a4a32" : "#1a2230";
-            items.Add(new StandaloneReplayListItem
+            var bg = h.MaxPot >= GameConstants.HighPotChipsThreshold ? "#2a4a32" : "#1a2230";
+            return new StandaloneReplayListItem
             {
                 Id = h.Id,
                 Name = h.HandName,
-                ReplayJson = h.HandHistoryJson,
-                DisplayLabel = $"{FormatReplayTime(h.HandTimeIso)} — {h.HandName} · max pot {h.MaxPot}",
+                DisplayLabel = $"{FormatReplayTime(h.HandTimeIso)} — {h.HandName} · max pula {h.MaxPot}",
                 MaxPot = h.MaxPot,
                 RowBackground = bg
-            });
-        }
+            };
+        }).ToList();
 
         ReplayHandsListBox.ItemsSource = items;
         ReplayHandsListBox.SelectedIndex = items.Count > 0 ? 0 : -1;
@@ -1218,7 +1274,10 @@ public partial class MainMenuWindow : Window
     {
         PokerDbBootstrap.EnsureInitialized();
         await using var db = PokerDbBootstrap.CreateContext();
-        var series = (await db.TournamentSeries.AsNoTracking().ToListAsync())
+        var series = (await db.TournamentSeries
+            .AsNoTracking()
+            .Select(s => new { s.Id, s.Name, s.CreatedAt })
+            .ToListAsync())
             .OrderByDescending(s => s.CreatedAt)
             .ToList();
         var items = series.Select(s => new TournamentSeriesListItem
@@ -1246,7 +1305,9 @@ public partial class MainMenuWindow : Window
         PokerDbBootstrap.EnsureInitialized();
         await using var db = PokerDbBootstrap.CreateContext();
         var s = await db.TournamentSeries.AsNoTracking().FirstOrDefaultAsync(x => x.Id == seriesId);
-        SeriesStatsTextBlock.Text = s is null ? string.Empty : TournamentSeriesStats.FormatStatsForDisplay(s);
+        SeriesStatsTextBlock.Text = s is null
+            ? string.Empty
+            : TournamentSeriesStats.FormatStatsForDisplay(s);
     }
 
     private static string SanitizeSeriesFileStem(string name)
@@ -1262,7 +1323,7 @@ public partial class MainMenuWindow : Window
         ReplayErrorTextBlock.Text = string.Empty;
         if (ReplaySeriesListBox.SelectedItem is not TournamentSeriesListItem sel)
         {
-            ReplayErrorTextBlock.Text = "Select a tournament series first.";
+            ReplayErrorTextBlock.Text = "Wybierz serię turniejów.";
             return;
         }
 
@@ -1270,10 +1331,11 @@ public partial class MainMenuWindow : Window
         if (top is null)
             return;
 
+        var includeHistory = ExportIncludeHandHistoryCheckBox.IsChecked == true;
         var stem = SanitizeSeriesFileStem(sel.SeriesName);
         var file = await top.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
-            Title = "Export tournament series details",
+            Title = "Eksport serii turniejów",
             SuggestedFileName = $"{stem}_details.csv",
             FileTypeChoices =
             [
@@ -1288,14 +1350,14 @@ public partial class MainMenuWindow : Window
 
         try
         {
-            var csv = await SeriesDetailsCsvExporter.BuildCsvAsync(sel.Id);
+            var csv = await SeriesDetailsCsvExporter.BuildCsvAsync(sel.Id, includeHistory);
             await using var stream = await file.OpenWriteAsync();
             await using var writer = new StreamWriter(stream);
             await writer.WriteAsync(csv);
         }
         catch
         {
-            ReplayErrorTextBlock.Text = "Export failed.";
+            ReplayErrorTextBlock.Text = "Eksport nieudany.";
         }
     }
 
@@ -1304,7 +1366,7 @@ public partial class MainMenuWindow : Window
         ReplayErrorTextBlock.Text = string.Empty;
         if (ReplaySeriesListBox.SelectedItem is not TournamentSeriesListItem sel)
         {
-            ReplayErrorTextBlock.Text = "Select a tournament series first.";
+            ReplayErrorTextBlock.Text = "Wybierz serię turniejów.";
             return;
         }
 
@@ -1316,7 +1378,7 @@ public partial class MainMenuWindow : Window
         }
         catch
         {
-            ReplayErrorTextBlock.Text = "Failed to delete series.";
+            ReplayErrorTextBlock.Text = "Nie udało się usunąć serii.";
         }
     }
 
@@ -1324,27 +1386,27 @@ public partial class MainMenuWindow : Window
     {
         var hide = HideSmallPotReplaysCheckBox.IsChecked == true;
         await using var db = PokerDbBootstrap.CreateContext();
-        var raw = await db.SavedHands
+        var query = db.SavedHands
             .AsNoTracking()
-            .Where(h => h.TournamentSeriesId == seriesId)
+            .Where(h => h.TournamentSeriesId == seriesId);
+        if (hide)
+            query = query.Where(h => h.MaxPot >= GameConstants.HighPotChipsThreshold);
+        var raw = await query
             .OrderByDescending(h => h.HandTimeIso)
+            .Select(h => new { h.Id, h.HandName, h.HandTimeIso, h.MaxPot })
             .ToListAsync();
-        var items = new List<SeriesHandReplayItem>();
-        foreach (var h in raw)
+        var items = raw.Select(h =>
         {
-            if (hide && h.MaxPot < GameConstants.HighPotChipsThreshold)
-                continue;
-            var bg = h.MaxPot > GameConstants.HighPotChipsThreshold ? "#2a4a32" : "#1a2230";
-            items.Add(new SeriesHandReplayItem
+            var bg = h.MaxPot >= GameConstants.HighPotChipsThreshold ? "#2a4a32" : "#1a2230";
+            return new SeriesHandReplayItem
             {
                 Id = h.Id,
                 Name = h.HandName,
-                ReplayJson = h.HandHistoryJson,
-                DisplayLabel = $"{FormatReplayTime(h.HandTimeIso)} — {h.HandName} · max pot {h.MaxPot}",
+                DisplayLabel = $"{FormatReplayTime(h.HandTimeIso)} — {h.HandName} · max pula {h.MaxPot}",
                 MaxPot = h.MaxPot,
                 RowBackground = bg
-            });
-        }
+            };
+        }).ToList();
 
         ReplaySeriesHandsListBox.ItemsSource = items;
         ReplaySeriesHandsListBox.SelectedIndex = items.Count > 0 ? 0 : -1;
@@ -1355,7 +1417,7 @@ public partial class MainMenuWindow : Window
         ReplayErrorTextBlock.Text = string.Empty;
         if (sender is not Control { DataContext: StandaloneReplayListItem item })
         {
-            ReplayErrorTextBlock.Text = "Could not resolve selected replay.";
+            ReplayErrorTextBlock.Text = "Nie można ustalić powtórki.";
             return;
         }
 
@@ -1366,7 +1428,7 @@ public partial class MainMenuWindow : Window
             var hand = await db.SavedHands.FirstOrDefaultAsync(h => h.Id == item.Id);
             if (hand is null)
             {
-                ReplayErrorTextBlock.Text = "Replay no longer exists.";
+                ReplayErrorTextBlock.Text = "Powtórka już nie istnieje.";
                 await LoadStandaloneReplaysAsync();
                 return;
             }
@@ -1376,7 +1438,7 @@ public partial class MainMenuWindow : Window
         }
         catch
         {
-            ReplayErrorTextBlock.Text = "Failed to delete replay.";
+            ReplayErrorTextBlock.Text = "Nie udało się usunąć powtórki.";
         }
     }
 
@@ -1385,7 +1447,7 @@ public partial class MainMenuWindow : Window
         ReplayErrorTextBlock.Text = string.Empty;
         if (sender is not Control { DataContext: SeriesHandReplayItem item })
         {
-            ReplayErrorTextBlock.Text = "Could not resolve selected replay.";
+            ReplayErrorTextBlock.Text = "Nie można ustalić powtórki.";
             return;
         }
 
@@ -1397,7 +1459,7 @@ public partial class MainMenuWindow : Window
             var hand = await db.SavedHands.FirstOrDefaultAsync(h => h.Id == item.Id);
             if (hand is null)
             {
-                ReplayErrorTextBlock.Text = "Replay no longer exists.";
+                ReplayErrorTextBlock.Text = "Powtórka już nie istnieje.";
                 if (seriesId != 0)
                     await LoadSeriesHandsAsync(seriesId);
                 return;
@@ -1409,7 +1471,7 @@ public partial class MainMenuWindow : Window
         }
         catch
         {
-            ReplayErrorTextBlock.Text = "Failed to delete replay.";
+            ReplayErrorTextBlock.Text = "Nie udało się usunąć powtórki.";
         }
     }
 
@@ -1471,7 +1533,6 @@ public partial class MainMenuWindow : Window
             bots,
             SpectatorSeriesMode: !ReplayIncludesHumanPlayer(replayJson));
         var view = new MainWindow(config, isReplayMode: true);
-        view.ReplayHandFinished += OnReplayHandFinished;
         view.ExitToMenuRequested += OnReplayExitRequested;
         view.LoadReplay(replayJson);
         return view;
@@ -1507,28 +1568,16 @@ public partial class MainMenuWindow : Window
         return true;
     }
 
-    private void OnReplayHandFinished(string winnerName)
-    {
-        _showingReplayHandResult = true;
-        HandSaveRow.IsVisible = false;
-        HandResultActionText.Text = "Back to main menu";
-        HandWinnerText.Text = $"Winner: {winnerName}";
-        SetOverlay(setupVisible: false, winnerVisible: false, handVisible: true);
-    }
-
     private void OnReplayExitRequested()
     {
         if (_gameView is not null)
-        {
-            _gameView.ReplayHandFinished -= OnReplayHandFinished;
             _gameView.ExitToMenuRequested -= OnReplayExitRequested;
-        }
         _gameView = null;
         GameHost.Content = null;
         GameHost.IsVisible = false;
         MenuLayer.IsVisible = true;
         _showingReplayHandResult = false;
         HandSaveRow.IsVisible = true;
-        HandResultActionText.Text = "Next";
+        HandResultActionText.Text = "Dalej";
     }
 }

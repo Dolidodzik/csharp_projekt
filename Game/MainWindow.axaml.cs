@@ -10,7 +10,6 @@ public partial class MainWindow : UserControl
 {
     private bool _loopStarted;
     public event Action<string>? TournamentFinished;
-    public event Action<string>? ReplayHandFinished;
     public Func<HandSummary, string, CancellationToken, Task>? HandFinishedAsync;
     public event Action? ExitToMenuRequested;
     private readonly bool _isReplayMode;
@@ -109,11 +108,6 @@ public partial class MainWindow : UserControl
         if (DataContext is MainWindowViewModel vm)
         {
             vm.AdvanceReplay();
-            if (vm.ReplayFinished)
-            {
-                var winners = string.IsNullOrWhiteSpace(vm.ReplayWinnersText) ? (vm.ReplayWinnerName ?? "Unknown") : vm.ReplayWinnersText;
-                ReplayHandFinished?.Invoke(winners);
-            }
         }
     }
 

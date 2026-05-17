@@ -5,9 +5,9 @@
              Background="#111111">
     <Grid RowDefinitions="Auto,*" Margin="16" RowSpacing="12">
         <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-            <Button Grid.Column="0" Content="Back" Click="OnBackClick" Padding="16,8" />
+            <Button Grid.Column="0" Content="Wstecz" Click="OnBackClick" Padding="16,8" />
             <TextBlock Grid.Column="1"
-                       Text="OpenAI presets"
+                       Text="Presety OpenAI"
                        VerticalAlignment="Center"
                        Foreground="#e8f0fa"
                        FontSize="18"
@@ -23,8 +23,8 @@
         <Grid Grid.Row="1" ColumnDefinitions="280,*" ColumnSpacing="16">
             <DockPanel Grid.Column="0" LastChildFill="True">
                 <StackPanel DockPanel.Dock="Bottom" Orientation="Vertical" Spacing="8" Margin="0,8,0,0">
-                    <Button Content="New" Click="OnNewClick" HorizontalAlignment="Stretch" />
-                    <Button Content="Delete" Click="OnDeleteClick" HorizontalAlignment="Stretch" />
+                    <Button Content="Nowy" Click="OnNewClick" HorizontalAlignment="Stretch" />
+                    <Button Content="Usuń" Click="OnDeleteClick" HorizontalAlignment="Stretch" />
                 </StackPanel>
                 <ListBox x:Name="PresetsList"
                          SelectionChanged="OnListSelectionChanged"
@@ -42,31 +42,31 @@
 
             <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
                 <StackPanel Spacing="10">
-                    <TextBlock Text="Name" Foreground="#b8c8dc" />
+                    <TextBlock Text="Nazwa" Foreground="#b8c8dc" />
                     <TextBox x:Name="NameEditor"
                              Background="#1a2230"
                              Foreground="#e8f0fa"
                              BorderBrush="#3a4a5e" />
-                    <TextBlock Text="API URL" Foreground="#b8c8dc" />
+                    <TextBlock Text="URL API" Foreground="#b8c8dc" />
                     <TextBox x:Name="UrlEditor"
                              PlaceholderText="https://..."
                              Background="#1a2230"
                              Foreground="#e8f0fa"
                              BorderBrush="#3a4a5e" />
-                    <TextBlock Text="API key" Foreground="#b8c8dc" />
+                    <TextBlock Text="Klucz API" Foreground="#b8c8dc" />
                     <TextBox x:Name="KeyEditor"
                              PasswordChar="*"
                              Background="#1a2230"
                              Foreground="#e8f0fa"
                              BorderBrush="#3a4a5e" />
-                    <TextBlock Text="Model name" Foreground="#b8c8dc" />
+                    <TextBlock Text="Model" Foreground="#b8c8dc" />
                     <TextBox x:Name="ModelEditor"
-                             PlaceholderText="model id"
+                             PlaceholderText="id modelu"
                              Background="#1a2230"
                              Foreground="#e8f0fa"
                              BorderBrush="#3a4a5e" />
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <Button Content="Save" Click="OnSaveClick" Padding="20,10" />
+                        <Button Content="Zapisz" Click="OnSaveClick" Padding="20,10" />
                     </StackPanel>
                 </StackPanel>
             </ScrollViewer>

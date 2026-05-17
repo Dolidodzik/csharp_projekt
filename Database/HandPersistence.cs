@@ -77,6 +77,18 @@ public static class HandPersistence
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public static async Task<string> LoadHandHistoryJsonAsync(int handId, CancellationToken cancellationToken = default)
+    {
+        PokerDbBootstrap.EnsureInitialized();
+        await using var db = PokerDbBootstrap.CreateContext();
+        var json = await db.SavedHands
+            .AsNoTracking()
+            .Where(h => h.Id == handId)
+            .Select(h => h.HandHistoryJson)
+            .FirstOrDefaultAsync(cancellationToken);
+        return json ?? string.Empty;
+    }
+
     public static async Task DiscardSeriesTournamentAsync(int seriesTournamentId, CancellationToken cancellationToken = default)
     {
         PokerDbBootstrap.EnsureInitialized();

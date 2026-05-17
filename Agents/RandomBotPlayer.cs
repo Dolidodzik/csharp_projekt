@@ -26,8 +26,9 @@ public sealed class RandomBotPlayer : BasePlayer
 
     public override PlayerAction GetTurn(IGetTurnContext context)
     {
+        _ui.GameCancellation.ThrowIfCancellationRequested();
         _ui.SetCurrentTurn(Name);
-        Thread.Sleep(1000);
+        // Thread.Sleep(1000);
         var action = PickAction(context);
         var contributed = EstimateContribution(context, action);
         _ui.SetPlayerStack(Name, context.MoneyLeft - contributed);

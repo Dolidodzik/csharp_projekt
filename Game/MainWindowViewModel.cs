@@ -21,7 +21,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
     private IGetTurnContext? _pendingHumanContext;
     private string _raiseText = "";
     private bool _gameRunning;
-    private string _humanPrompt = "When it is your turn, use the buttons below.";
+    private string _humanPrompt = "Twoja kolej — użyj przycisków poniżej.";
     private bool _humanTurnActive;
     private int _pot;
     private TournamentSession? _session;
@@ -75,7 +75,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
 
     public bool ShowBottomDock => IsReplayMode || ShowHumanActionPanel;
 
-    public string ExitMenuButtonText => _config.SpectatorSeriesMode ? "Leave game" : "Exit to main menu";
+    public string ExitMenuButtonText => _config.SpectatorSeriesMode ? "Wyjdź z gry" : "Wyjdź do menu";
 
     public bool SeriesProgressVisible =>
         _config.SpectatorSeriesMode
@@ -84,7 +84,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
 
     public string SeriesProgressText =>
         SeriesProgressVisible
-            ? $"Tournament {_config.SeriesTournamentNumber!.Value} of {_config.SeriesTournamentTotal!.Value}"
+            ? $"Turniej {_config.SeriesTournamentNumber!.Value} z {_config.SeriesTournamentTotal!.Value}"
             : string.Empty;
 
     public PlayerRowVm HumanSeat { get; }
@@ -107,8 +107,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
                 return;
             HumanTurnActive = value is not null;
             HumanPrompt = value is null
-                ? "When it is your turn, use the buttons below."
-                : $"To call: {value.MoneyToCall} · Min raise: {value.MinRaise}";
+                ? "Twoja kolej — użyj przycisków poniżej."
+                : $"Do sprawdzenia: {value.MoneyToCall} · Min. podbicie: {value.MinRaise}";
         }
     }
 
@@ -235,6 +235,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
     }
 
     public void RunOnUiThread(Action action) => Dispatcher.UIThread.Post(action);
+
+    private void RunOnUiThreadSync(Action action)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+            action();
+        else
+            Dispatcher.UIThread.Invoke(action);
+    }
 
     public void AppendHandHistory(object jsonSerializable)
     {
@@ -416,7 +424,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
         {
             if (!_seatByName.TryGetValue(playerName, out var row))
                 return;
-            var hide = maskOpponentHoles
+            var hide = !IsReplayMode
+                && maskOpponentHoles
                 && playerName != GameConstants.HumanPlayerName
                 && !_config.SpectatorSeriesMode;
             row.HideHoles = hide;
@@ -527,11 +536,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
         MinRaise = 0;
         CheckCallButtonText = "Check";
         CanRaiseAction = false;
-        foreach (var seat in Seats)
-        {
-            seat.ResetForNewHand();
-            seat.IsReplayMode = true;
-        }
+        var startStacks = new Dictionary<string, int>(StringComparer.Ordinal);
+        var startHoles = new Dictionary<string, (Card? C1, Card? C2)>(StringComparer.Ordinal);
 
         try
         {
@@ -544,26 +550,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
                 ReplayWinnersText = string.Join(", ", names);
             }
             if (!doc.RootElement.TryGetProperty("events", out var events) || events.ValueKind != JsonValueKind.Array)
+            {
+                ApplyReplayInitialSeatState(startStacks, startHoles);
                 return;
+            }
+
+            TryApplyWinnersFromHandEndEvent(events);
+            CollectReplayStartHoles(events, startStacks, startHoles);
             foreach (var ev in events.EnumerateArray())
             {
                 if (!ev.TryGetProperty("ev", out var typeEl))
                     continue;
                 var type = typeEl.GetString() ?? string.Empty;
-                if (type == "start_hand")
-                {
-                    var player = ev.TryGetProperty("player", out var pEl) ? pEl.GetString() ?? string.Empty : string.Empty;
-                    var stack = ev.TryGetProperty("stack", out var sEl) && sEl.TryGetInt32(out var st) ? st : _config.BuyIn;
-                    if (!string.IsNullOrWhiteSpace(player))
-                        SetPlayerStack(player, stack);
-                    if (!string.IsNullOrWhiteSpace(player) && ev.TryGetProperty("cards", out var cardsEl) && cardsEl.ValueKind == JsonValueKind.Array)
-                    {
-                        var cards = ParseCards(cardsEl);
-                        var c1 = cards.Count > 0 ? cards[0] : (Card?)null;
-                        var c2 = cards.Count > 1 ? cards[1] : (Card?)null;
-                        SetHoleCards(player, c1, c2, maskOpponentHoles: false);
-                    }
-                }
                 if (type == "start_round")
                 {
                     var roundName = ev.TryGetProperty("round", out var rr) ? rr.GetString() ?? string.Empty : string.Empty;
@@ -587,11 +585,92 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
                 _replaySteps.Add(new ReplayActionStep(playerName, round, actionText, moneyToCall, moneyLeft, pot, prompt, thought));
             }
             ReplayHasNextAction = _replaySteps.Count > 0;
+            ApplyReplayInitialSeatState(startStacks, startHoles);
         }
         catch
         {
             ReplayHasNextAction = false;
         }
+    }
+
+    private static void CollectReplayStartHoles(
+        JsonElement events,
+        Dictionary<string, int> startStacks,
+        Dictionary<string, (Card? C1, Card? C2)> startHoles)
+    {
+        foreach (var ev in events.EnumerateArray())
+        {
+            if (!ev.TryGetProperty("ev", out var typeEl))
+                continue;
+            var type = typeEl.GetString() ?? string.Empty;
+            if (type == "start_hand")
+            {
+                var player = ev.TryGetProperty("player", out var pEl) ? pEl.GetString() ?? string.Empty : string.Empty;
+                if (string.IsNullOrWhiteSpace(player))
+                    continue;
+                var stack = ev.TryGetProperty("stack", out var sEl) && sEl.TryGetInt32(out var st) ? st : 0;
+                startStacks[player] = stack;
+                if (stack <= 0 || !ev.TryGetProperty("cards", out var cardsEl) || cardsEl.ValueKind != JsonValueKind.Array)
+                    continue;
+                var cards = ParseCards(cardsEl);
+                startHoles[player] = (
+                    cards.Count > 0 ? cards[0] : null,
+                    cards.Count > 1 ? cards[1] : null);
+                continue;
+            }
+
+            if (type != "showdown" || !ev.TryGetProperty("cards", out var showdownCards) || showdownCards.ValueKind != JsonValueKind.Object)
+                continue;
+            foreach (var prop in showdownCards.EnumerateObject())
+            {
+                if (prop.Value.ValueKind != JsonValueKind.Array)
+                    continue;
+                if (startStacks.TryGetValue(prop.Name, out var stack) && stack <= 0)
+                    continue;
+                var cards = ParseCards(prop.Value);
+                startHoles[prop.Name] = (
+                    cards.Count > 0 ? cards[0] : null,
+                    cards.Count > 1 ? cards[1] : null);
+            }
+        }
+    }
+
+    private void ApplyReplayInitialSeatState(
+        IReadOnlyDictionary<string, int> startStacks,
+        IReadOnlyDictionary<string, (Card? C1, Card? C2)> startHoles)
+    {
+        RunOnUiThreadSync(() =>
+        {
+            foreach (var seat in Seats)
+            {
+                seat.ResetForNewHand();
+                seat.IsReplayMode = true;
+                seat.HideHoles = false;
+                seat.Chips = 0;
+                seat.IsBusted = true;
+                seat.Hole1 = null;
+                seat.Hole2 = null;
+            }
+
+            foreach (var seat in Seats)
+            {
+                if (!startStacks.TryGetValue(seat.Name, out var stack))
+                    continue;
+                seat.Chips = stack;
+                seat.IsBusted = stack <= 0;
+            }
+
+            foreach (var (player, cards) in startHoles)
+            {
+                if (!startStacks.TryGetValue(player, out var stack) || stack <= 0)
+                    continue;
+                if (!_seatByName.TryGetValue(player, out var row))
+                    continue;
+                row.HideHoles = false;
+                row.Hole1 = cards.C1 is not null ? SvgCardBitmap.TryLoad(cards.C1) : null;
+                row.Hole2 = cards.C2 is not null ? SvgCardBitmap.TryLoad(cards.C2) : null;
+            }
+        });
     }
 
     public void AdvanceReplay()
@@ -619,7 +698,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
                 step.ThoughtBeforeAction ?? string.Empty,
                 showReplayDiagnostics: true));
             if (_seatByName.TryGetValue(step.PlayerName, out var row))
+            {
                 row.LastAction = humanText;
+                if (humanText.Contains("pas", StringComparison.OrdinalIgnoreCase))
+                    row.IsFoldedThisHand = true;
+                row.HideHoles = false;
+            }
             HistoryUiChanged?.Invoke();
         });
         var contributed = EstimateContributionFromReplay(step.Action, step.MoneyToCall, step.MoneyLeft);
@@ -627,7 +711,56 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
         SetPot(step.Pot + contributed);
         ReplayHasNextAction = _replayCursor < _replaySteps.Count;
         if (!ReplayHasNextAction)
+        {
             ReplayFinished = true;
+            AppendReplayWinnerToHistory();
+        }
+    }
+
+    private void TryApplyWinnersFromHandEndEvent(JsonElement events)
+    {
+        if (!string.IsNullOrWhiteSpace(ReplayWinnersText))
+            return;
+        foreach (var ev in events.EnumerateArray())
+        {
+            if (!ev.TryGetProperty("ev", out var typeEl) || typeEl.GetString() != "hand_end")
+                continue;
+            if (!ev.TryGetProperty("winners", out var winnersEl) || winnersEl.ValueKind != JsonValueKind.Array)
+                continue;
+            var names = winnersEl.EnumerateArray()
+                .Select(x => x.GetString())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Cast<string>()
+                .ToArray();
+            if (names.Length > 0)
+                ReplayWinnersText = string.Join(", ", names);
+            return;
+        }
+    }
+
+    private void AppendReplayWinnerToHistory()
+    {
+        var winners = string.IsNullOrWhiteSpace(ReplayWinnersText)
+            ? (ReplayWinnerName ?? string.Empty)
+            : ReplayWinnersText;
+        if (string.IsNullOrWhiteSpace(winners))
+            return;
+
+        RunOnUiThread(() =>
+        {
+            var section = CurrentHandRounds.Count > 0
+                ? CurrentHandRounds[^1]
+                : AddRoundSection("Wynik");
+            if (section.Actions.Any(a => a.Text.StartsWith("Zwycięzca ręki:", StringComparison.Ordinal)))
+                return;
+            section.Actions.Add(new HandHistoryActionVm(
+                $"Zwycięzca ręki: {winners}",
+                string.Empty,
+                string.Empty,
+                showReplayDiagnostics: false));
+            SetStatus($"Koniec rozdania — zwycięzca: {winners}");
+            HistoryUiChanged?.Invoke();
+        });
     }
 
     public async Task<HandSummary> PlayNextHandAsync(CancellationToken cancellationToken = default)
@@ -686,7 +819,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
                 PendingHumanContext = null;
                 _humanChoice = null;
                 CanRaiseAction = false;
-                tcs.TrySetResult(PlayerAction.Fold());
+                tcs.TrySetCanceled();
             });
         });
         RunOnUiThread(() =>
@@ -799,12 +932,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
     {
         return action.Type switch
         {
-            PlayerActionType.Fold => "folds",
-            PlayerActionType.CheckCall when moneyToCall <= 0 => "checks",
-            PlayerActionType.CheckCall => $"calls {moneyToCall}",
-            PlayerActionType.Raise when moneyLeft > 0 && moneyToCall + Math.Max(0, action.Money) >= moneyLeft => "raises ALL IN",
-            PlayerActionType.Raise => $"raises by {action.Money}",
-            PlayerActionType.Post => $"posts {action.Money}",
+            PlayerActionType.Fold => "pas",
+            PlayerActionType.CheckCall when moneyToCall <= 0 => "check",
+            PlayerActionType.CheckCall => $"call {moneyToCall}",
+            PlayerActionType.Raise when moneyLeft > 0 && moneyToCall + Math.Max(0, action.Money) >= moneyLeft => "all-in",
+            PlayerActionType.Raise => $"podbija {action.Money}",
+            PlayerActionType.Post => $"stawia {action.Money}",
             _ => action.ToString()
         };
     }
@@ -843,25 +976,25 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
     private static string NormalizeRoundName(string round) =>
         round switch
         {
-            "PreFlop" => "Pre-Flop",
+            "PreFlop" => "Pre-flop",
             _ => round
         };
 
     private static string ToHumanActionFromReplay(string actionText, int moneyToCall, int moneyLeft)
     {
         if (actionText.Contains("Fold", StringComparison.OrdinalIgnoreCase))
-            return "folds";
+            return "pas";
         if (actionText.Contains("CheckOrCall", StringComparison.OrdinalIgnoreCase))
-            return moneyToCall <= 0 ? "checks" : $"calls {moneyToCall}";
+            return moneyToCall <= 0 ? "check" : $"call {moneyToCall}";
         if (actionText.Contains("Raise", StringComparison.OrdinalIgnoreCase))
         {
             var raise = ParseRaiseAmount(actionText);
             if (moneyLeft > 0 && moneyToCall + Math.Max(0, raise) >= moneyLeft)
-                return "raises ALL IN";
-            return $"raises by {raise}";
+                return "all-in";
+            return $"podbija {raise}";
         }
         if (actionText.Contains("Post", StringComparison.OrdinalIgnoreCase))
-            return $"posts {ParseRaiseAmount(actionText)}";
+            return $"stawia {ParseRaiseAmount(actionText)}";
         return actionText;
     }
 

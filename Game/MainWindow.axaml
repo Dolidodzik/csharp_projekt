@@ -69,7 +69,7 @@
                                         <StackPanel Spacing="6">
                                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="#eceff4" HorizontalAlignment="Center" />
                                         <TextBlock Foreground="#a0a7b4" HorizontalAlignment="Center">
-                                            <Run Text="Stack: " />
+                                            <Run Text="Żetony: " />
                                             <Run Text="{Binding Chips}" />
                                         </TextBlock>
                                         <TextBlock Foreground="#88c0d0" HorizontalAlignment="Center" FontSize="12" Text="{Binding LastAction}" IsVisible="{Binding ShowLastAction}" />
@@ -112,7 +112,7 @@
                             </ItemsControl>
                             <Border Background="#2b3140" CornerRadius="6" Padding="12,8" MinWidth="110">
                                 <StackPanel>
-                                    <TextBlock Text="Pot" Foreground="#9aa0a6" HorizontalAlignment="Center" />
+                                    <TextBlock Text="Pula" Foreground="#9aa0a6" HorizontalAlignment="Center" />
                                     <TextBlock Text="{Binding Pot}" Foreground="#e8eaed" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center" />
                                 </StackPanel>
                             </Border>
@@ -126,7 +126,7 @@
                             <StackPanel Spacing="8">
                             <TextBlock Text="{Binding HumanSeat.Name}" FontWeight="SemiBold" Foreground="#f0f4ff" HorizontalAlignment="Center" />
                             <TextBlock Foreground="#b4bdcf" HorizontalAlignment="Center">
-                                <Run Text="Stack: " />
+                                <Run Text="Żetony: " />
                                 <Run Text="{Binding HumanSeat.Chips}" />
                             </TextBlock>
                             <TextBlock Foreground="#88c0d0" HorizontalAlignment="Center" FontSize="13" Text="{Binding HumanSeat.LastAction}" IsVisible="{Binding HumanSeat.ShowLastAction}" />
@@ -153,7 +153,7 @@
 
         <Border Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Background="#252a33" CornerRadius="10" Padding="10">
             <DockPanel>
-                <TextBlock DockPanel.Dock="Top" Text="hand history" Foreground="#9aa0a6" FontSize="14" Margin="0,0,0,8" />
+                <TextBlock DockPanel.Dock="Top" Text="historia" Foreground="#9aa0a6" FontSize="14" Margin="0,0,0,8" />
                 <ScrollViewer x:Name="HistoryScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <ItemsControl ItemsSource="{Binding CurrentHandRounds}">
                         <ItemsControl.ItemTemplate>
@@ -177,7 +177,7 @@
                                                                     </Style>
                                                                 </TextBlock.Styles>
                                                             </TextBlock>
-                                                            <TextBlock Text="thoughts"
+                                                            <TextBlock Text="myśli"
                                                                        Foreground="#cfd7e4"
                                                                        IsVisible="{Binding ShowThoughtLink}"
                                                                        PointerPressed="OnHistoryThoughtPressed">
@@ -219,22 +219,22 @@
             <Viewbox Stretch="Uniform" HorizontalAlignment="Center">
                 <Grid Width="760" Height="150">
                     <Grid RowDefinitions="Auto,Auto,Auto,Auto" ColumnDefinitions="Auto,Auto,Auto,Auto,*" IsVisible="{Binding ShowHumanActionPanel}">
-                        <TextBlock Grid.Row="0" Grid.ColumnSpan="5" Text="Your action" Foreground="#e8eaed" FontWeight="SemiBold" FontSize="20" />
-                        <TextBlock Grid.Row="1" Grid.Column="0" Foreground="#9aa0a6" Margin="0,8,8,8" Text="To call:" FontSize="16" />
+                        <TextBlock Grid.Row="0" Grid.ColumnSpan="5" Text="Twój ruch" Foreground="#e8eaed" FontWeight="SemiBold" FontSize="20" />
+                        <TextBlock Grid.Row="1" Grid.Column="0" Foreground="#9aa0a6" Margin="0,8,8,8" Text="Do sprawdzenia:" FontSize="16" />
                         <TextBlock Grid.Row="1" Grid.Column="1" Foreground="#e8eaed" Margin="0,8,18,8" Text="{Binding ToCall}" FontSize="18" />
-                        <TextBlock Grid.Row="1" Grid.Column="2" Foreground="#9aa0a6" Margin="0,8,8,8" Text="Min raise:" FontSize="16" />
+                        <TextBlock Grid.Row="1" Grid.Column="2" Foreground="#9aa0a6" Margin="0,8,8,8" Text="Min. podbicie:" FontSize="16" />
                         <TextBlock Grid.Row="1" Grid.Column="3" Foreground="#e8eaed" Margin="0,8,0,8" Text="{Binding MinRaise}" FontSize="18" />
 
-                        <Button Grid.Row="2" Grid.Column="0" Grid.RowSpan="2" Classes="action-btn" Content="Fold" Click="OnFold" IsEnabled="{Binding HumanTurnActive}" MinHeight="48" MinWidth="110" FontSize="18" Margin="0,8,8,0" />
+                        <Button Grid.Row="2" Grid.Column="0" Grid.RowSpan="2" Classes="action-btn" Content="Pas" Click="OnFold" IsEnabled="{Binding HumanTurnActive}" MinHeight="48" MinWidth="110" FontSize="18" Margin="0,8,8,0" />
                         <Button Grid.Row="2" Grid.Column="1" Grid.RowSpan="2" Classes="action-btn" Content="{Binding CheckCallButtonText}" Click="OnCheckCall" IsEnabled="{Binding HumanTurnActive}" MinHeight="48" MinWidth="140" FontSize="18" Margin="0,8,8,0" />
-                        <TextBox Grid.Row="2" Grid.Column="2" Grid.RowSpan="2" Width="120" Height="48" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" PlaceholderText="Raise" Text="{Binding RaiseText, Mode=TwoWay}" FontSize="18" Margin="0,8,8,0" />
-                        <Button Grid.Row="2" Grid.Column="3" Grid.RowSpan="2" Classes="action-btn" Content="Raise" Click="OnRaise" IsEnabled="{Binding CanRaiseNow}" MinHeight="48" MinWidth="120" FontSize="18" Margin="0,8,0,0" />
+                        <TextBox Grid.Row="2" Grid.Column="2" Grid.RowSpan="2" Width="120" Height="48" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" PlaceholderText="Podbicie" Text="{Binding RaiseText, Mode=TwoWay}" FontSize="18" Margin="0,8,8,0" />
+                        <Button Grid.Row="2" Grid.Column="3" Grid.RowSpan="2" Classes="action-btn" Content="Podbij" Click="OnRaise" IsEnabled="{Binding CanRaiseNow}" MinHeight="48" MinWidth="120" FontSize="18" Margin="0,8,0,0" />
                     </Grid>
                     <Grid IsVisible="{Binding IsReplayMode}">
                         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12">
-                            <TextBlock Text="Replay controls" Foreground="#e8eaed" FontWeight="SemiBold" FontSize="20" HorizontalAlignment="Center" />
+                            <TextBlock Text="Powtórka" Foreground="#e8eaed" FontWeight="SemiBold" FontSize="20" HorizontalAlignment="Center" />
                             <Button Classes="action-btn"
-                                    Content="NEXT ACTION"
+                                    Content="NASTĘPNY RUCH"
                                     Click="OnNextReplayActionClick"
                                     IsEnabled="{Binding ReplayHasNextAction}"
                                     MinHeight="52"

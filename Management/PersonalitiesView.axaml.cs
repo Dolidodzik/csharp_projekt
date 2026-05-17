@@ -32,7 +32,7 @@ public partial class PersonalitiesView : UserControl
         ErrorText.Text = string.Empty;
         if (PersonalitiesList.SelectedItem is not LlmAgentPersonality selected)
         {
-            ErrorText.Text = "Select a personality to delete.";
+            ErrorText.Text = "Wybierz osobowość do usunięcia.";
             return;
         }
 
@@ -59,7 +59,7 @@ public partial class PersonalitiesView : UserControl
         var name = NameEditor.Text?.Trim() ?? string.Empty;
         if (string.IsNullOrEmpty(name))
         {
-            ErrorText.Text = "Name is required.";
+            ErrorText.Text = "Podaj nazwę.";
             return;
         }
 
@@ -82,7 +82,7 @@ public partial class PersonalitiesView : UserControl
             var entity = await db.LlmAgentPersonalities.FindAsync(_editingId.Value);
             if (entity == null)
             {
-                ErrorText.Text = "Record no longer exists.";
+                ErrorText.Text = "Rekord już nie istnieje.";
                 await RefreshListAsync();
                 return;
             }

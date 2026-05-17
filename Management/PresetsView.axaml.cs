@@ -35,7 +35,7 @@ public partial class PresetsView : UserControl
         ErrorText.Text = string.Empty;
         if (PresetsList.SelectedItem is not OpenAiPreset selected)
         {
-            ErrorText.Text = "Select a preset to delete.";
+            ErrorText.Text = "Wybierz preset do usunięcia.";
             return;
         }
 
@@ -65,14 +65,14 @@ public partial class PresetsView : UserControl
         var name = NameEditor.Text?.Trim() ?? string.Empty;
         if (string.IsNullOrEmpty(name))
         {
-            ErrorText.Text = "Name is required.";
+            ErrorText.Text = "Podaj nazwę.";
             return;
         }
 
         var url = UrlEditor.Text?.Trim() ?? string.Empty;
         if (string.IsNullOrEmpty(url))
         {
-            ErrorText.Text = "API URL is required.";
+            ErrorText.Text = "Podaj URL API.";
             return;
         }
 
@@ -80,7 +80,7 @@ public partial class PresetsView : UserControl
         var model = ModelEditor.Text?.Trim() ?? string.Empty;
         if (string.IsNullOrEmpty(model))
         {
-            ErrorText.Text = "Model name is required.";
+            ErrorText.Text = "Podaj model.";
             return;
         }
 
@@ -104,7 +104,7 @@ public partial class PresetsView : UserControl
             var entity = await db.OpenAiPresets.FindAsync(_editingId.Value);
             if (entity == null)
             {
-                ErrorText.Text = "Record no longer exists.";
+                ErrorText.Text = "Rekord już nie istnieje.";
                 await RefreshListAsync();
                 return;
             }

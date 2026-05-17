@@ -8,7 +8,7 @@ public static class SeriesDetailsCsvExporter
 {
     private const int MaxPlayers = 6;
 
-    public static async Task<string> BuildCsvAsync(int seriesId, CancellationToken cancellationToken = default)
+    public static async Task<string> BuildCsvAsync(int seriesId, bool includeHandHistory, CancellationToken cancellationToken = default)
     {
         PokerDbBootstrap.EnsureInitialized();
         await using var db = PokerDbBootstrap.CreateContext();
@@ -30,12 +30,10 @@ public static class SeriesDetailsCsvExporter
             .ToList();
 
         var sb = new StringBuilder();
-        sb.AppendLine(BuildHeader());
+        sb.AppendLine(BuildHeader(includeHandHistory));
         foreach (var h in ordered)
         {
-            var tid = 0;
-            if (h.SeriesTournamentId is { } sid && stMap.TryGetValue(sid, out var idx))
-                tid = idx + 1;
+            var tid = SeriesHandGrouping.ResolveTournamentNumber(h, stMap);
 
             var roster = ReplayJsonUtil.RosterNamesFromReplayJson(h.HandHistoryJson);
             var before = ReplayJsonUtil.StartStacksFromReplayJson(h.HandHistoryJson);
@@ -77,6 +75,8 @@ public static class SeriesDetailsCsvExporter
             }
 
             row.Add(C(handWinner));
+            if (includeHandHistory)
+                row.Add(C(ReplayJsonUtil.FormatHandHistoryForExport(h.HandHistoryJson)));
             sb.AppendLine(string.Join(",", row));
         }
 
@@ -96,7 +96,7 @@ public static class SeriesDetailsCsvExporter
         return "";
     }
 
-    private static string BuildHeader()
+    private static string BuildHeader(bool includeHandHistory)
     {
         var parts = new List<string> { "hand_datetime", "tournament_id" };
         for (var i = 1; i <= MaxPlayers; i++)
@@ -112,6 +112,8 @@ public static class SeriesDetailsCsvExporter
         }
 
         parts.Add("hand_winner");
+        if (includeHandHistory)
+            parts.Add("hand_history");
         return string.Join(",", parts);
     }
 

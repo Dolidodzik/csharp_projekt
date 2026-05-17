@@ -2,7 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="using:PokerApp"
         x:Class="PokerApp.MainMenuWindow"
-        Title="PokerApp - Main Menu"
+        Title="PokerApp — menu"
         MinWidth="900"
         MinHeight="600"
         WindowStartupLocation="CenterScreen"
@@ -64,23 +64,23 @@
                         HorizontalAlignment="Center"
                         Margin="24">
 
-                <TextBlock Text="Start Game"
+                <TextBlock Text="Gra"
                            Classes="menu-link"
                            HorizontalAlignment="Center"
                            PointerPressed="OnStartGamePressed" />
-                <TextBlock Text="LLM agent personalities"
+                <TextBlock Text="Osobowości botów"
                            Classes="menu-link"
                            HorizontalAlignment="Center"
                            PointerPressed="OnPersonalitiesPressed" />
-                <TextBlock Text="OpenAI presets"
+                <TextBlock Text="Presety OpenAI"
                            Classes="menu-link"
                            HorizontalAlignment="Center"
                            PointerPressed="OnPresetsPressed" />
-                <TextBlock Text="View replay"
+                <TextBlock Text="Powtórki"
                            Classes="menu-link"
                            HorizontalAlignment="Center"
                            PointerPressed="OnViewReplayPressed" />
-                <TextBlock Text="Exit"
+                <TextBlock Text="Wyjdź"
                            Classes="menu-link"
                            HorizontalAlignment="Center"
                            PointerPressed="OnExitPressed" />
@@ -102,124 +102,124 @@
                 VerticalAlignment="Center">
             <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnDefinitions="Auto,*" RowSpacing="10" ColumnSpacing="12">
                 <TextBlock Grid.Row="0" Grid.ColumnSpan="2"
-                           Text="Game setup"
+                           Text="Ustawienia gry"
                            FontSize="32"
                            FontWeight="Bold"
                            Foreground="#f4f8ff" />
 
-                <TextBlock Grid.Row="1" Grid.Column="0" Text="Mode" VerticalAlignment="Center" Foreground="#d2deeb" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Tryb" VerticalAlignment="Center" Foreground="#d2deeb" />
                 <ComboBox x:Name="GameModeComboBox" Grid.Row="1" Grid.Column="1" SelectionChanged="OnGameModeChanged">
-                    <ComboBoxItem Content="Play" />
-                    <ComboBoxItem Content="Tournament series (bots only)" />
+                    <ComboBoxItem Content="Gra" />
+                    <ComboBoxItem Content="Seria turniejów (boty)" />
                 </ComboBox>
 
                 <StackPanel x:Name="SeriesFieldsPanel" Grid.Row="2" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="16" IsVisible="False">
-                    <TextBlock Text="Series name" VerticalAlignment="Center" Foreground="#d2deeb" />
-                    <TextBox x:Name="SeriesNameTextBox" Width="220" PlaceholderText="name" />
-                    <TextBlock Text="Tournaments" VerticalAlignment="Center" Foreground="#d2deeb" />
+                    <TextBlock Text="Nazwa serii" VerticalAlignment="Center" Foreground="#d2deeb" />
+                    <TextBox x:Name="SeriesNameTextBox" Width="220" PlaceholderText="nazwa" />
+                    <TextBlock Text="Turnieje" VerticalAlignment="Center" Foreground="#d2deeb" />
                     <TextBox x:Name="SeriesTournamentCountTextBox" Width="80" Text="5" />
                     <Button x:Name="ClearSeriesSetupPrefsButton"
-                            Content="Clear saved setup"
+                            Content="Wyczyść zapis"
                             Padding="10,6"
                             Click="OnClearSeriesSetupPrefsClick" />
                 </StackPanel>
 
                 <TextBlock Grid.Row="3" Grid.Column="0" Text="Buy-in" VerticalAlignment="Center" Foreground="#d2deeb" />
-                <TextBox x:Name="BuyInTextBox" Grid.Row="3" Grid.Column="1" PlaceholderText="e.g. 10000" />
+                <TextBox x:Name="BuyInTextBox" Grid.Row="3" Grid.Column="1" PlaceholderText="np. 10000" />
 
-                <TextBlock Grid.Row="4" Grid.Column="0" Text="Small blind" VerticalAlignment="Center" Foreground="#d2deeb" />
-                <TextBox x:Name="SmallBlindTextBox" Grid.Row="4" Grid.Column="1" PlaceholderText="e.g. 25" TextChanged="OnSmallBlindChanged" />
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Mały blind" VerticalAlignment="Center" Foreground="#d2deeb" />
+                <TextBox x:Name="SmallBlindTextBox" Grid.Row="4" Grid.Column="1" PlaceholderText="np. 25" TextChanged="OnSmallBlindChanged" />
 
-                <TextBlock Grid.Row="5" Grid.Column="0" Text="Big blind" VerticalAlignment="Center" Foreground="#d2deeb" />
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="Duży blind" VerticalAlignment="Center" Foreground="#d2deeb" />
                 <TextBlock x:Name="BigBlindInfoText" Grid.Row="5" Grid.Column="1" VerticalAlignment="Center" Foreground="#8fbcbb" />
 
-                <TextBlock Grid.Row="6" Grid.Column="0" Text="Bot count" VerticalAlignment="Center" Foreground="#d2deeb" />
+                <TextBlock Grid.Row="6" Grid.Column="0" Text="Liczba botów" VerticalAlignment="Center" Foreground="#d2deeb" />
                 <ComboBox x:Name="BotCountComboBox" Grid.Row="6" Grid.Column="1" SelectionChanged="OnBotCountChanged" />
 
                 <StackPanel Grid.Row="7" Grid.ColumnSpan="2" Spacing="8">
                     <Grid x:Name="Bot1Row" ColumnDefinitions="Auto,*,Auto,130,Auto,130,Auto,*" ColumnSpacing="8">
-                        <TextBlock Grid.Column="0" Text="Bot 1 type" VerticalAlignment="Center" Foreground="#d2deeb" />
+                        <TextBlock Grid.Column="0" Text="Bot 1 typ" VerticalAlignment="Center" Foreground="#d2deeb" />
                         <ComboBox x:Name="Bot1TypeComboBox" Grid.Column="1" SelectionChanged="OnBotTypeChanged">
-                            <ComboBoxItem Content="RandomBotPlayer" />
-                            <ComboBoxItem Content="LlmBotPlayer" />
+                            <ComboBoxItem Content="Bot losowy" />
+                            <ComboBoxItem Content="Bot LLM" />
                         </ComboBox>
-                        <TextBlock Grid.Column="2" Text="Pers." VerticalAlignment="Center" Foreground="#d2deeb" />
+                        <TextBlock Grid.Column="2" Text="Osob." VerticalAlignment="Center" Foreground="#d2deeb" />
                         <ComboBox x:Name="Bot1PersonalityComboBox" Grid.Column="3" />
                         <TextBlock Grid.Column="4" Text="Preset" VerticalAlignment="Center" Foreground="#d2deeb" />
                         <ComboBox x:Name="Bot1PresetComboBox" Grid.Column="5" />
-                        <TextBlock Grid.Column="6" Text="Name" VerticalAlignment="Center" Foreground="#d2deeb" />
-                        <TextBox x:Name="Bot1NameTextBox" Grid.Column="7" PlaceholderText="Bot name" />
+                        <TextBlock Grid.Column="6" Text="Nazwa" VerticalAlignment="Center" Foreground="#d2deeb" />
+                        <TextBox x:Name="Bot1NameTextBox" Grid.Column="7" PlaceholderText="Nazwa bota" />
                     </Grid>
                     <Grid x:Name="Bot2Row" ColumnDefinitions="Auto,*,Auto,130,Auto,130,Auto,*" ColumnSpacing="8">
-                        <TextBlock Grid.Column="0" Text="Bot 2 type" VerticalAlignment="Center" Foreground="#d2deeb" />
+                        <TextBlock Grid.Column="0" Text="Bot 2 typ" VerticalAlignment="Center" Foreground="#d2deeb" />
                         <ComboBox x:Name="Bot2TypeComboBox" Grid.Column="1" SelectionChanged="OnBotTypeChanged">
-                            <ComboBoxItem Content="RandomBotPlayer" />
-                            <ComboBoxItem Content="LlmBotPlayer" />
+                            <ComboBoxItem Content="Bot losowy" />
+                            <ComboBoxItem Content="Bot LLM" />
                         </ComboBox>
-                        <TextBlock Grid.Column="2" Text="Pers." VerticalAlignment="Center" Foreground="#d2deeb" />
+                        <TextBlock Grid.Column="2" Text="Osob." VerticalAlignment="Center" Foreground="#d2deeb" />
                         <ComboBox x:Name="Bot2PersonalityComboBox" Grid.Column="3" />
                         <TextBlock Grid.Column="4" Text="Preset" VerticalAlignment="Center" Foreground="#d2deeb" />
                         <ComboBox x:Name="Bot2PresetComboBox" Grid.Column="5" />
-                        <TextBlock Grid.Column="6" Text="Name" VerticalAlignment="Center" Foreground="#d2deeb" />
-                        <TextBox x:Name="Bot2NameTextBox" Grid.Column="7" PlaceholderText="Bot name" />
+                        <TextBlock Grid.Column="6" Text="Nazwa" VerticalAlignment="Center" Foreground="#d2deeb" />
+                        <TextBox x:Name="Bot2NameTextBox" Grid.Column="7" PlaceholderText="Nazwa bota" />
                     </Grid>
                     <Grid x:Name="Bot3Row" ColumnDefinitions="Auto,*,Auto,130,Auto,130,Auto,*" ColumnSpacing="8">
-                        <TextBlock Grid.Column="0" Text="Bot 3 type" VerticalAlignment="Center" Foreground="#d2deeb" />
+                        <TextBlock Grid.Column="0" Text="Bot 3 typ" VerticalAlignment="Center" Foreground="#d2deeb" />
                         <ComboBox x:Name="Bot3TypeComboBox" Grid.Column="1" SelectionChanged="OnBotTypeChanged">
-                            <ComboBoxItem Content="RandomBotPlayer" />
-                            <ComboBoxItem Content="LlmBotPlayer" />
+                            <ComboBoxItem Content="Bot losowy" />
+                            <ComboBoxItem Content="Bot LLM" />
                         </ComboBox>
-                        <TextBlock Grid.Column="2" Text="Pers." VerticalAlignment="Center" Foreground="#d2deeb" />
+                        <TextBlock Grid.Column="2" Text="Osob." VerticalAlignment="Center" Foreground="#d2deeb" />
                         <ComboBox x:Name="Bot3PersonalityComboBox" Grid.Column="3" />
                         <TextBlock Grid.Column="4" Text="Preset" VerticalAlignment="Center" Foreground="#d2deeb" />
                         <ComboBox x:Name="Bot3PresetComboBox" Grid.Column="5" />
-                        <TextBlock Grid.Column="6" Text="Name" VerticalAlignment="Center" Foreground="#d2deeb" />
-                        <TextBox x:Name="Bot3NameTextBox" Grid.Column="7" PlaceholderText="Bot name" />
+                        <TextBlock Grid.Column="6" Text="Nazwa" VerticalAlignment="Center" Foreground="#d2deeb" />
+                        <TextBox x:Name="Bot3NameTextBox" Grid.Column="7" PlaceholderText="Nazwa bota" />
                     </Grid>
                     <Grid x:Name="Bot4Row" ColumnDefinitions="Auto,*,Auto,130,Auto,130,Auto,*" ColumnSpacing="8" IsVisible="False">
-                        <TextBlock Grid.Column="0" Text="Bot 4 type" VerticalAlignment="Center" Foreground="#d2deeb" />
+                        <TextBlock Grid.Column="0" Text="Bot 4 typ" VerticalAlignment="Center" Foreground="#d2deeb" />
                         <ComboBox x:Name="Bot4TypeComboBox" Grid.Column="1" SelectionChanged="OnBotTypeChanged">
-                            <ComboBoxItem Content="RandomBotPlayer" />
-                            <ComboBoxItem Content="LlmBotPlayer" />
+                            <ComboBoxItem Content="Bot losowy" />
+                            <ComboBoxItem Content="Bot LLM" />
                         </ComboBox>
-                        <TextBlock Grid.Column="2" Text="Pers." VerticalAlignment="Center" Foreground="#d2deeb" />
+                        <TextBlock Grid.Column="2" Text="Osob." VerticalAlignment="Center" Foreground="#d2deeb" />
                         <ComboBox x:Name="Bot4PersonalityComboBox" Grid.Column="3" />
                         <TextBlock Grid.Column="4" Text="Preset" VerticalAlignment="Center" Foreground="#d2deeb" />
                         <ComboBox x:Name="Bot4PresetComboBox" Grid.Column="5" />
-                        <TextBlock Grid.Column="6" Text="Name" VerticalAlignment="Center" Foreground="#d2deeb" />
-                        <TextBox x:Name="Bot4NameTextBox" Grid.Column="7" PlaceholderText="Bot name" />
+                        <TextBlock Grid.Column="6" Text="Nazwa" VerticalAlignment="Center" Foreground="#d2deeb" />
+                        <TextBox x:Name="Bot4NameTextBox" Grid.Column="7" PlaceholderText="Nazwa bota" />
                     </Grid>
                     <Grid x:Name="Bot5Row" ColumnDefinitions="Auto,*,Auto,130,Auto,130,Auto,*" ColumnSpacing="8" IsVisible="False">
-                        <TextBlock Grid.Column="0" Text="Bot 5 type" VerticalAlignment="Center" Foreground="#d2deeb" />
+                        <TextBlock Grid.Column="0" Text="Bot 5 typ" VerticalAlignment="Center" Foreground="#d2deeb" />
                         <ComboBox x:Name="Bot5TypeComboBox" Grid.Column="1" SelectionChanged="OnBotTypeChanged">
-                            <ComboBoxItem Content="RandomBotPlayer" />
-                            <ComboBoxItem Content="LlmBotPlayer" />
+                            <ComboBoxItem Content="Bot losowy" />
+                            <ComboBoxItem Content="Bot LLM" />
                         </ComboBox>
-                        <TextBlock Grid.Column="2" Text="Pers." VerticalAlignment="Center" Foreground="#d2deeb" />
+                        <TextBlock Grid.Column="2" Text="Osob." VerticalAlignment="Center" Foreground="#d2deeb" />
                         <ComboBox x:Name="Bot5PersonalityComboBox" Grid.Column="3" />
                         <TextBlock Grid.Column="4" Text="Preset" VerticalAlignment="Center" Foreground="#d2deeb" />
                         <ComboBox x:Name="Bot5PresetComboBox" Grid.Column="5" />
-                        <TextBlock Grid.Column="6" Text="Name" VerticalAlignment="Center" Foreground="#d2deeb" />
-                        <TextBox x:Name="Bot5NameTextBox" Grid.Column="7" PlaceholderText="Bot name" />
+                        <TextBlock Grid.Column="6" Text="Nazwa" VerticalAlignment="Center" Foreground="#d2deeb" />
+                        <TextBox x:Name="Bot5NameTextBox" Grid.Column="7" PlaceholderText="Nazwa bota" />
                     </Grid>
                     <Grid x:Name="Bot6Row" ColumnDefinitions="Auto,*,Auto,130,Auto,130,Auto,*" ColumnSpacing="8" IsVisible="False">
-                        <TextBlock Grid.Column="0" Text="Bot 6 type" VerticalAlignment="Center" Foreground="#d2deeb" />
+                        <TextBlock Grid.Column="0" Text="Bot 6 typ" VerticalAlignment="Center" Foreground="#d2deeb" />
                         <ComboBox x:Name="Bot6TypeComboBox" Grid.Column="1" SelectionChanged="OnBotTypeChanged">
-                            <ComboBoxItem Content="RandomBotPlayer" />
-                            <ComboBoxItem Content="LlmBotPlayer" />
+                            <ComboBoxItem Content="Bot losowy" />
+                            <ComboBoxItem Content="Bot LLM" />
                         </ComboBox>
-                        <TextBlock Grid.Column="2" Text="Pers." VerticalAlignment="Center" Foreground="#d2deeb" />
+                        <TextBlock Grid.Column="2" Text="Osob." VerticalAlignment="Center" Foreground="#d2deeb" />
                         <ComboBox x:Name="Bot6PersonalityComboBox" Grid.Column="3" />
                         <TextBlock Grid.Column="4" Text="Preset" VerticalAlignment="Center" Foreground="#d2deeb" />
                         <ComboBox x:Name="Bot6PresetComboBox" Grid.Column="5" />
-                        <TextBlock Grid.Column="6" Text="Name" VerticalAlignment="Center" Foreground="#d2deeb" />
-                        <TextBox x:Name="Bot6NameTextBox" Grid.Column="7" PlaceholderText="Bot name" />
+                        <TextBlock Grid.Column="6" Text="Nazwa" VerticalAlignment="Center" Foreground="#d2deeb" />
+                        <TextBox x:Name="Bot6NameTextBox" Grid.Column="7" PlaceholderText="Nazwa bota" />
                     </Grid>
                 </StackPanel>
 
                 <StackPanel Grid.Row="8" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
                     <TextBlock x:Name="SetupErrorTextBlock" Foreground="#ff9191" VerticalAlignment="Center" />
-                    <TextBlock Text="Cancel" Classes="menu-link" FontSize="30" PointerPressed="OnCancelSetupPressed" />
+                    <TextBlock Text="Anuluj" Classes="menu-link" FontSize="30" PointerPressed="OnCancelSetupPressed" />
                     <TextBlock Text="Start" Classes="menu-link" FontSize="30" PointerPressed="OnConfirmSetupPressed" />
                 </StackPanel>
             </Grid>
@@ -237,7 +237,7 @@
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center">
             <StackPanel Spacing="14">
-                <TextBlock Text="Tournament finished"
+                <TextBlock Text="Koniec turnieju"
                            FontSize="34"
                            FontWeight="Bold"
                            Foreground="#f4f8ff"
@@ -246,7 +246,7 @@
                            FontSize="26"
                            Foreground="#d8f0e2"
                            HorizontalAlignment="Center" />
-                <TextBlock Text="Back to main menu"
+                <TextBlock Text="Menu główne"
                            Classes="menu-link"
                            FontSize="32"
                            HorizontalAlignment="Center"
@@ -266,7 +266,7 @@
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center">
             <StackPanel Spacing="14">
-                <TextBlock Text="Hand finished"
+                <TextBlock Text="Koniec rozdania"
                            FontSize="34"
                            FontWeight="Bold"
                            Foreground="#f4f8ff"
@@ -279,18 +279,18 @@
                            TextAlignment="Center" />
                 <Grid x:Name="HandSaveRow">
                     <StackPanel x:Name="HandSaveActivePanel" Orientation="Vertical" Spacing="8" HorizontalAlignment="Center" Width="380">
-                        <TextBox x:Name="HandNameTextBox" PlaceholderText="Hand name (required for save)" />
+                        <TextBox x:Name="HandNameTextBox" PlaceholderText="Nazwa rozdania (do zapisu)" />
                         <TextBlock x:Name="HandSaveErrorTextBlock" Foreground="#ff9191" TextWrapping="Wrap" />
                         <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
                             <CheckBox x:Name="SaveHandCheckBox" VerticalAlignment="Center" IsCheckedChanged="OnSaveHandCheckChanged" />
-                            <TextBlock Text="Save this hand"
+                            <TextBlock Text="Zapisz rękę"
                                        Classes="hand-save-link"
                                        VerticalAlignment="Center"
                                        PointerPressed="OnSaveHandLabelPressed" />
                         </StackPanel>
                     </StackPanel>
                     <TextBlock x:Name="HandSavedLabel"
-                               Text="Saved"
+                               Text="Zapisano"
                                FontSize="18"
                                Foreground="#7a8a9e"
                                HorizontalAlignment="Center"
@@ -298,7 +298,7 @@
                                IsVisible="False" />
                 </Grid>
                 <TextBlock x:Name="HandResultActionText"
-                           Text="Next"
+                           Text="Dalej"
                            Classes="menu-link"
                            FontSize="32"
                            HorizontalAlignment="Center"
@@ -318,25 +318,25 @@
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center">
             <StackPanel Spacing="18">
-                <TextBlock Text="Exit to main menu?"
+                <TextBlock Text="Wyjść do menu?"
                            FontSize="28"
                            FontWeight="Bold"
                            Foreground="#f4f8ff"
                            HorizontalAlignment="Center"
                            TextWrapping="Wrap"
                            TextAlignment="Center" />
-                <TextBlock Text="The tournament will end. Are you sure?"
+                <TextBlock Text="Turniej się skończy. Na pewno?"
                            FontSize="18"
                            Foreground="#d2deeb"
                            HorizontalAlignment="Center"
                            TextWrapping="Wrap"
                            TextAlignment="Center" />
                 <StackPanel Orientation="Horizontal" Spacing="20" HorizontalAlignment="Center">
-                    <TextBlock Text="Cancel"
+                    <TextBlock Text="Anuluj"
                                Classes="menu-link"
                                FontSize="28"
                                PointerPressed="OnExitConfirmCancelPressed" />
-                    <TextBlock Text="Yes, exit"
+                    <TextBlock Text="Tak, wyjdź"
                                Classes="menu-link"
                                FontSize="28"
                                PointerPressed="OnExitConfirmYesPressed" />
@@ -356,17 +356,17 @@
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center">
             <Grid RowDefinitions="Auto,Auto,*,Auto,Auto" RowSpacing="10">
-                <TextBlock Text="Replays"
+                <TextBlock Text="Powtórki"
                            FontSize="30"
                            FontWeight="Bold"
                            Foreground="#f4f8ff" />
                 <ComboBox x:Name="ReplaySourceComboBox" Grid.Row="1" SelectionChanged="OnReplaySourceChanged">
-                    <ComboBoxItem Content="Standalone hands" />
-                    <ComboBoxItem Content="Tournament series" />
+                    <ComboBoxItem Content="Pojedyncze ręce" />
+                    <ComboBoxItem Content="Serie turniejów" />
                 </ComboBox>
                 <Grid Grid.Row="2" MinHeight="300">
                     <DockPanel x:Name="StandaloneReplayDock">
-                        <TextBlock DockPanel.Dock="Top" Text="Hands" Foreground="#b8c8dc" Margin="0,0,0,6" />
+                        <TextBlock DockPanel.Dock="Top" Text="Ręce" Foreground="#b8c8dc" Margin="0,0,0,6" />
                         <ListBox x:Name="ReplayHandsListBox"
                                  Background="#1a2230"
                                  Foreground="#e8f0fa"
@@ -382,7 +382,7 @@
                                                        TextWrapping="Wrap" />
                                             <Button Grid.Column="1"
                                                     Classes="replay-delete-btn"
-                                                    Content="Delete"
+                                                    Content="Usuń"
                                                     Click="OnDeleteStandaloneReplayClick" />
                                         </Grid>
                                     </Border>
@@ -392,7 +392,7 @@
                     </DockPanel>
                     <Grid x:Name="SeriesReplayRoot" ColumnDefinitions="*,12,*" IsVisible="False">
                         <Grid Grid.Column="0" RowDefinitions="Auto,*,Auto,Auto" RowSpacing="8">
-                            <TextBlock Grid.Row="0" Text="Tournament series" Foreground="#8fbcbb" FontSize="12" />
+                            <TextBlock Grid.Row="0" Text="Serie turniejów" Foreground="#8fbcbb" FontSize="12" />
                             <ListBox x:Name="ReplaySeriesListBox"
                                      Grid.Row="1"
                                      SelectionChanged="OnReplaySeriesSelectionChanged"
@@ -412,18 +412,23 @@
                                            Foreground="#c8d8e8"
                                            FontSize="13" />
                             </ScrollViewer>
-                            <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="10">
-                                <Button Content="Export details CSV"
+                            <StackPanel Grid.Row="3" Orientation="Vertical" Spacing="8">
+                                <CheckBox x:Name="ExportIncludeHandHistoryCheckBox"
+                                          Content="Historia i myśli w CSV"
+                                          Foreground="#d2deeb" />
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Button Content="Eksport CSV"
                                         Click="OnExportSeriesCsvClick"
                                         Padding="10,6" />
-                                <Button Content="Delete series"
+                                <Button Content="Usuń serię"
                                         Classes="replay-delete-btn"
                                         Click="OnDeleteSeriesClick"
                                         Padding="10,6" />
+                                </StackPanel>
                             </StackPanel>
                         </Grid>
                         <DockPanel Grid.Column="2">
-                            <TextBlock DockPanel.Dock="Top" Text="Hands" Foreground="#8fbcbb" FontSize="12" Margin="0,0,0,4" />
+                            <TextBlock DockPanel.Dock="Top" Text="Ręce" Foreground="#8fbcbb" FontSize="12" Margin="0,0,0,4" />
                             <ListBox x:Name="ReplaySeriesHandsListBox"
                                      Background="#1a2230"
                                      Foreground="#e8f0fa"
@@ -439,7 +444,7 @@
                                                            TextWrapping="Wrap" />
                                                 <Button Grid.Column="1"
                                                         Classes="replay-delete-btn"
-                                                        Content="Delete"
+                                                        Content="Usuń"
                                                         Click="OnDeleteSeriesHandReplayClick" />
                                             </Grid>
                                         </Border>
@@ -452,8 +457,8 @@
                 <CheckBox x:Name="HideSmallPotReplaysCheckBox" Grid.Row="3" Foreground="#d2deeb" IsCheckedChanged="OnHideSmallPotReplaysChanged" />
                 <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="12">
                     <TextBlock x:Name="ReplayErrorTextBlock" Foreground="#ff9191" VerticalAlignment="Center" />
-                    <TextBlock Text="Close" Classes="menu-link" FontSize="26" PointerPressed="OnCloseReplayListPressed" />
-                    <TextBlock Text="Open replay" Classes="menu-link" FontSize="26" PointerPressed="OnOpenReplayPressed" />
+                    <TextBlock Text="Zamknij" Classes="menu-link" FontSize="26" PointerPressed="OnCloseReplayListPressed" />
+                    <TextBlock Text="Otwórz" Classes="menu-link" FontSize="26" PointerPressed="OnOpenReplayPressed" />
                 </StackPanel>
             </Grid>
         </Border>

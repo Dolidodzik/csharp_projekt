@@ -1,2 +1,0 @@
-
-zrobić żeby historia rąk była też zawarta w exporcie .csv

@@ -92,6 +92,7 @@ public sealed class LlmBotPlayer : BasePlayer
         if (possible.HasSingleLegalAction)
             return FinalizeAction(context, possible.SingleLegalAction, null, null);
 
+        _ui.GameCancellation.ThrowIfCancellationRequested();
         var ownCards = new List<Card> { FirstCard, SecondCard };
         var userPrompt = LlmPrompts.BuildUserPrompt(
             context,

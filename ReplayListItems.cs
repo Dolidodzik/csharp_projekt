@@ -6,8 +6,6 @@ public sealed class StandaloneReplayListItem
 
     public string Name { get; init; } = "";
 
-    public string ReplayJson { get; init; } = "";
-
     public string DisplayLabel { get; init; } = "";
 
     public int MaxPot { get; init; }
@@ -29,8 +27,6 @@ public sealed class SeriesHandReplayItem
     public int Id { get; init; }
 
     public string Name { get; init; } = "";
-
-    public string ReplayJson { get; init; } = "";
 
     public string DisplayLabel { get; init; } = "";
 

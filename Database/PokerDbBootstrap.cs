@@ -4,6 +4,8 @@ namespace PokerApp;
 
 public static class PokerDbBootstrap
 {
+    private const string SchemaVersion = "3";
+
     private static DbContextOptions<PokerDbContext>? _options;
 
     public static void EnsureInitialized()
@@ -16,41 +18,34 @@ public static class PokerDbBootstrap
         if (!string.IsNullOrEmpty(dir))
             Directory.CreateDirectory(dir);
 
+        var verPath = path + ".ver";
+        var matches = File.Exists(verPath) && File.ReadAllText(verPath).Trim() == SchemaVersion;
+        if (!matches)
+        {
+            try
+            {
+                if (File.Exists(path))
+                    File.Delete(path);
+            }
+            catch
+            {
+            }
+
+            File.WriteAllText(verPath, SchemaVersion);
+        }
+
         _options = new DbContextOptionsBuilder<PokerDbContext>()
-            .UseSqlite($"Data Source={path}")
+            .UseSqlite($"Data Source={path};Mode=ReadWriteCreate;Cache=Shared")
             .Options;
 
         using var db = new PokerDbContext(_options);
         db.Database.EnsureCreated();
-        ApplyHandTablesIfMissing(db);
-    }
-
-    private static void ApplyHandTablesIfMissing(PokerDbContext db)
-    {
-        db.Database.ExecuteSqlRaw("""
-            CREATE TABLE IF NOT EXISTS saved_hand (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                hand_name TEXT NOT NULL DEFAULT '',
-                hand_history_json TEXT NOT NULL,
-                hand_time TEXT NOT NULL
-            );
-            """);
-        try
-        {
-            db.Database.ExecuteSqlRaw("""
-                ALTER TABLE saved_hand ADD COLUMN hand_name TEXT NOT NULL DEFAULT '';
-                """);
-        }
-        catch
-        {
-        }
-        db.Database.ExecuteSqlRaw("""
-            CREATE TABLE IF NOT EXISTS hand_player (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                hand_id INTEGER NOT NULL REFERENCES saved_hand(id) ON DELETE CASCADE,
-                player_name TEXT NOT NULL,
-                player_type TEXT NOT NULL,
-                llm_personality INTEGER NULL REFERENCES llm_agent_personalities(id) ON DELETE SET NULL
+        db.Database.ExecuteSqlRaw(
+            """
+            CREATE TABLE IF NOT EXISTS tournament_series_setup_prefs (
+                id INTEGER NOT NULL PRIMARY KEY,
+                options_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL
             );
             """);
     }
@@ -64,10 +59,13 @@ public static class PokerDbBootstrap
 
     private static string ResolveSqlitePath()
     {
-        var exeDir = AppContext.BaseDirectory;
-        var candidate = Path.GetFullPath(Path.Combine(exeDir, "..", "..", ".."));
-        if (File.Exists(Path.Combine(candidate, "PokerApp.csproj")))
-            return Path.Combine(candidate, "Database", "llm_personalities.sqlite");
-        return Path.Combine(exeDir, "Database", "llm_personalities.sqlite");
+        var env = Environment.GetEnvironmentVariable("POKERAPP_DB");
+        if (!string.IsNullOrWhiteSpace(env))
+            return Path.GetFullPath(env.Trim());
+
+        var root = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "PokerApp");
+        return Path.Combine(root, "poker_app.sqlite");
     }
 }

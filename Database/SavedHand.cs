@@ -10,5 +10,15 @@ public sealed class SavedHand
 
     public string HandTimeIso { get; set; } = string.Empty;
 
+    public int MaxPot { get; set; }
+
+    public int? TournamentSeriesId { get; set; }
+
+    public TournamentSeries? TournamentSeries { get; set; }
+
+    public int? SeriesTournamentId { get; set; }
+
+    public SeriesTournament? SeriesTournament { get; set; }
+
     public ICollection<HandPlayer> HandPlayers { get; } = new List<HandPlayer>();
 }

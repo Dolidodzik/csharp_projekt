@@ -7,6 +7,8 @@ public interface IGameUi
 {
     CancellationToken GameCancellation { get; }
 
+    int CurrentHandBigBlind { get; }
+
     void RunOnUiThread(Action action);
 
     void AppendHandHistory(object jsonSerializable);

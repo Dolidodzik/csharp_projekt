@@ -15,4 +15,8 @@ public sealed class HandPlayer
     public int? LlmPersonalityId { get; set; }
 
     public LlmAgentPersonality? LlmPersonality { get; set; }
+
+    public int? OpenAiPresetId { get; set; }
+
+    public OpenAiPreset? OpenAiPreset { get; set; }
 }

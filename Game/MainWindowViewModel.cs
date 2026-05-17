@@ -47,11 +47,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
     {
     }
 
+    public int CurrentHandBigBlind => _session?.CurrentHandBigBlind ?? _config.BigBlind;
+
     public MainWindowViewModel(GameSetupConfig config)
     {
         _config = config;
         HumanSeat = new PlayerRowVm(GameConstants.HumanPlayerName);
-        Seats.Add(HumanSeat);
+        if (!_config.SpectatorSeriesMode)
+            Seats.Add(HumanSeat);
         foreach (var botInfo in _config.Bots)
         {
             var bot = new PlayerRowVm(botInfo.Name);
@@ -65,6 +68,24 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
         foreach (var s in Seats)
             s.Chips = _config.BuyIn;
     }
+
+    public bool HumanPanelVisible => !_config.SpectatorSeriesMode;
+
+    public bool ShowHumanActionPanel => HumanPanelVisible && !IsReplayMode;
+
+    public bool ShowBottomDock => IsReplayMode || ShowHumanActionPanel;
+
+    public string ExitMenuButtonText => _config.SpectatorSeriesMode ? "Leave game" : "Exit to main menu";
+
+    public bool SeriesProgressVisible =>
+        _config.SpectatorSeriesMode
+        && _config.SeriesTournamentNumber is > 0
+        && _config.SeriesTournamentTotal is > 0;
+
+    public string SeriesProgressText =>
+        SeriesProgressVisible
+            ? $"Tournament {_config.SeriesTournamentNumber!.Value} of {_config.SeriesTournamentTotal!.Value}"
+            : string.Empty;
 
     public PlayerRowVm HumanSeat { get; }
 
@@ -180,7 +201,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
     public bool IsReplayMode
     {
         get => _isReplayMode;
-        private set => SetField(ref _isReplayMode, value);
+        private set
+        {
+            if (!SetField(ref _isReplayMode, value))
+                return;
+            OnPropertyChanged(nameof(ShowHumanActionPanel));
+            OnPropertyChanged(nameof(ShowBottomDock));
+        }
     }
 
     public bool ReplayHasNextAction
@@ -238,9 +265,22 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
                 ["tournament_finished"] = summary.TournamentFinished,
                 ["tournament_winner"] = summary.TournamentWinner,
                 ["winners"] = JsonSerializer.SerializeToNode(summary.Winners, JsonOpts),
-                ["final_stacks"] = JsonSerializer.SerializeToNode(summary.Stacks, JsonOpts),
+                ["final_stacks"] = JsonSerializer.SerializeToNode(
+                    summary.Stacks.Select(t => new { name = t.Name, stack = t.Stack }).ToList(),
+                    JsonOpts),
                 ["tournament"] = JsonSerializer.SerializeToNode(
-                    new { buy_in = _config.BuyIn, small_blind = _config.SmallBlind, big_blind = _config.BigBlind },
+                    new
+                    {
+                        buy_in = _config.BuyIn,
+                        small_blind = TournamentBlindSchedule.SmallBlindForHand(
+                            _config.SmallBlind,
+                            summary.HandNumber,
+                            _config.SpectatorSeriesMode),
+                        big_blind = TournamentBlindSchedule.SmallBlindForHand(
+                            _config.SmallBlind,
+                            summary.HandNumber,
+                            _config.SpectatorSeriesMode) * 2
+                    },
                     JsonOpts),
                 ["events"] = events
             };
@@ -257,11 +297,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
             {
                 _replayHandBound = handNumber;
                 _replayEvents.Clear();
+                var sbHand = TournamentBlindSchedule.SmallBlindForHand(
+                    _config.SmallBlind,
+                    handNumber,
+                    _config.SpectatorSeriesMode);
                 _replayEvents.Add(JsonSerializer.SerializeToElement(new
                 {
                     ev = "replay_header",
                     hand_number = handNumber,
-                    tournament = new { buy_in = _config.BuyIn, small_blind = _config.SmallBlind, big_blind = _config.BigBlind },
+                    tournament = new { buy_in = _config.BuyIn, small_blind = sbHand, big_blind = sbHand * 2 },
                     players = BuildReplayPlayersRoster()
                 }, JsonOpts));
                 runUiReset = true;
@@ -372,7 +416,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
         {
             if (!_seatByName.TryGetValue(playerName, out var row))
                 return;
-            var hide = maskOpponentHoles && playerName != GameConstants.HumanPlayerName;
+            var hide = maskOpponentHoles
+                && playerName != GameConstants.HumanPlayerName
+                && !_config.SpectatorSeriesMode;
             row.HideHoles = hide;
             row.Hole1 = card1 is not null ? SvgCardBitmap.TryLoad(card1) : null;
             row.Hole2 = card2 is not null ? SvgCardBitmap.TryLoad(card2) : null;
@@ -434,8 +480,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
         foreach (var seat in Seats)
             seat.IsReplayMode = false;
         var ui = this;
-        var players = new List<IPlayer> { new HumanPlayer(ui, WaitHumanAction) };
-        OpenAiCompatClient? llmClient = null;
+        var players = new List<IPlayer>();
+        if (!_config.SpectatorSeriesMode)
+            players.Add(new HumanPlayer(ui, WaitHumanAction));
         foreach (var botInfo in _config.Bots)
         {
             players.Add(botInfo.Type switch
@@ -443,21 +490,20 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
                 BotType.LlmBotPlayer => new LlmBotPlayer(
                     botInfo.Name,
                     ui,
-                    llmClient ??= new OpenAiCompatClient(
-                        _config.LlmApiUrl ?? "http://127.0.0.1:8111/v1",
-                        _config.LlmApiKey ?? string.Empty,
-                        _config.LlmModel,
+                    new OpenAiCompatClient(
+                        botInfo.OpenAiPreset!.ApiUrl,
+                        botInfo.OpenAiPreset.ApiKey,
+                        botInfo.OpenAiPreset.ModelName,
                         _config.LlmTemperature),
-                    _config.BigBlind,
-                    botInfo.LlmPersonality),
+                    botInfo.LlmPersonality,
+                    botInfo.OpenAiPreset),
                 BotType.RandomBotPlayer => new RandomBotPlayer(botInfo.Name, ui),
                 _ => new RandomBotPlayer(botInfo.Name, ui),
             });
         }
 
-        _session = new TournamentSession(players, _config.BuyIn, _config.SmallBlind);
-        foreach (var (name, stack) in GetCurrentStacks())
-            SetPlayerStack(name, stack);
+        _session = new TournamentSession(players, _config.BuyIn, _config.SmallBlind, _config.SpectatorSeriesMode);
+        SyncSeatsFromSummary(Seats.Select(s => (s.Name, s.Chips)).ToList());
     }
 
     public void InitializeReplay(string replayJson)
@@ -595,15 +641,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
         try
         {
             var summary = await Task.Run(() => _session.PlayNextHand(cancellationToken), cancellationToken);
-            foreach (var (name, stack) in summary.Stacks)
-                SetPlayerStack(name, stack);
+            SyncSeatsFromSummary(summary.Stacks);
             SetStatus(string.Empty);
             AppendHandHistory(new
             {
                 ev = "hand_end",
                 hand = summary.HandNumber,
                 winners = summary.Winners,
-                stacks = summary.Stacks,
+                stacks = summary.Stacks.Select(t => new { name = t.Name, stack = t.Stack }).ToList(),
                 tournamentFinished = summary.TournamentFinished,
                 tournamentWinner = summary.TournamentWinner
             });
@@ -659,16 +704,21 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
 
     private object[] BuildReplayPlayersRoster()
     {
-        var list = new List<object>
+        var list = new List<object>();
+        if (!_config.SpectatorSeriesMode)
         {
-            new
+            list.Add(new
             {
                 name = GameConstants.HumanPlayerName,
                 player_type = "HUMAN",
                 llm_personality_id = (int?)null,
-                llm_personality_name = (string?)null
-            }
-        };
+                llm_personality_name = (string?)null,
+                openai_preset_id = (int?)null,
+                openai_preset_name = (string?)null,
+                openai_model_name = (string?)null
+            });
+        }
+
         foreach (var b in _config.Bots)
         {
             list.Add(new
@@ -676,7 +726,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
                 name = b.Name,
                 player_type = b.Type == BotType.LlmBotPlayer ? "LLM_AGENT" : "RANDOM_BOT",
                 llm_personality_id = b.LlmPersonality?.Id,
-                llm_personality_name = string.IsNullOrWhiteSpace(b.LlmPersonality?.Name) ? null : b.LlmPersonality.Name
+                llm_personality_name = string.IsNullOrWhiteSpace(b.LlmPersonality?.Name) ? null : b.LlmPersonality.Name,
+                openai_preset_id = b.OpenAiPreset?.Id,
+                openai_preset_name = string.IsNullOrWhiteSpace(b.OpenAiPreset?.Name) ? null : b.OpenAiPreset.Name,
+                openai_model_name = string.IsNullOrWhiteSpace(b.OpenAiPreset?.ModelName) ? null : b.OpenAiPreset.ModelName
             });
         }
 
@@ -715,9 +768,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
         t.TrySetResult(PlayerAction.Raise(amt));
     }
 
-    public IReadOnlyDictionary<string, int> GetCurrentStacks()
+    private void SyncSeatsFromSummary(IReadOnlyList<(string Name, int Stack)> stacks)
     {
-        return Seats.ToDictionary(s => s.Name, s => s.Chips, StringComparer.Ordinal);
+        RunOnUiThread(() =>
+        {
+            for (var i = 0; i < stacks.Count && i < Seats.Count; i++)
+            {
+                var row = Seats[i];
+                row.Chips = stacks[i].Stack;
+                row.IsBusted = row.Chips <= 0;
+                if (row.IsBusted)
+                    row.IsFoldedThisHand = true;
+            }
+        });
     }
 
     private void OnPropertyChanged([CallerMemberName] string? n = null) =>

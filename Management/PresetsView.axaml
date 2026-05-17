@@ -1,13 +1,13 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="using:PokerApp"
-             x:Class="PokerApp.PersonalitiesView"
+             x:Class="PokerApp.PresetsView"
              Background="#111111">
     <Grid RowDefinitions="Auto,*" Margin="16" RowSpacing="12">
         <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
             <Button Grid.Column="0" Content="Back" Click="OnBackClick" Padding="16,8" />
             <TextBlock Grid.Column="1"
-                       Text="Manage LLM agent personalities"
+                       Text="OpenAI presets"
                        VerticalAlignment="Center"
                        Foreground="#e8f0fa"
                        FontSize="18"
@@ -26,14 +26,14 @@
                     <Button Content="New" Click="OnNewClick" HorizontalAlignment="Stretch" />
                     <Button Content="Delete" Click="OnDeleteClick" HorizontalAlignment="Stretch" />
                 </StackPanel>
-                <ListBox x:Name="PersonalitiesList"
+                <ListBox x:Name="PresetsList"
                          SelectionChanged="OnListSelectionChanged"
                          Background="#1a2230"
                          Foreground="#e8f0fa"
                          BorderBrush="#3a4a5e"
                          BorderThickness="1">
                     <ListBox.ItemTemplate>
-                        <DataTemplate x:DataType="local:LlmAgentPersonality">
+                        <DataTemplate x:DataType="local:OpenAiPreset">
                             <TextBlock Text="{Binding Name}" />
                         </DataTemplate>
                     </ListBox.ItemTemplate>
@@ -44,16 +44,24 @@
                 <StackPanel Spacing="10">
                     <TextBlock Text="Name" Foreground="#b8c8dc" />
                     <TextBox x:Name="NameEditor"
-                             PlaceholderText="Personality name"
                              Background="#1a2230"
                              Foreground="#e8f0fa"
                              BorderBrush="#3a4a5e" />
-                    <TextBlock Text="Personality description" Foreground="#b8c8dc" />
-                    <TextBox x:Name="DescriptionEditor"
-                             AcceptsReturn="True"
-                             TextWrapping="Wrap"
-                             MinHeight="260"
-                             PlaceholderText="Long text…"
+                    <TextBlock Text="API URL" Foreground="#b8c8dc" />
+                    <TextBox x:Name="UrlEditor"
+                             PlaceholderText="https://..."
+                             Background="#1a2230"
+                             Foreground="#e8f0fa"
+                             BorderBrush="#3a4a5e" />
+                    <TextBlock Text="API key" Foreground="#b8c8dc" />
+                    <TextBox x:Name="KeyEditor"
+                             PasswordChar="*"
+                             Background="#1a2230"
+                             Foreground="#e8f0fa"
+                             BorderBrush="#3a4a5e" />
+                    <TextBlock Text="Model name" Foreground="#b8c8dc" />
+                    <TextBox x:Name="ModelEditor"
+                             PlaceholderText="model id"
                              Background="#1a2230"
                              Foreground="#e8f0fa"
                              BorderBrush="#3a4a5e" />

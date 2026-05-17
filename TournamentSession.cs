@@ -7,7 +7,7 @@ namespace PokerApp;
 public sealed record HandSummary(
     int HandNumber,
     IReadOnlyList<string> Winners,
-    IReadOnlyDictionary<string, int> Stacks,
+    IReadOnlyList<(string Name, int Stack)> Stacks,
     bool TournamentFinished,
     string? TournamentWinner);
 
@@ -33,15 +33,22 @@ public sealed class TournamentSession
         new[] { typeof(IStartGameContext) },
         null)!;
 
-    private readonly int _smallBlind;
+    private readonly int _baseSmallBlind;
+    private readonly bool _escalatingBlinds;
     private readonly object _master;
     private object _shifted;
     private int _handNumber;
     private bool _endGameSent;
 
-    public TournamentSession(IReadOnlyList<IPlayer> players, int startingStack, int smallBlind)
+    public int CurrentHandBigBlind { get; private set; }
+
+    public int UpcomingHandNumber => _handNumber + 1;
+
+    public TournamentSession(IReadOnlyList<IPlayer> players, int startingStack, int baseSmallBlind, bool escalatingBlinds = false)
     {
-        _smallBlind = smallBlind;
+        _baseSmallBlind = baseSmallBlind;
+        _escalatingBlinds = escalatingBlinds;
+        CurrentHandBigBlind = TournamentBlindSchedule.SmallBlindForHand(baseSmallBlind, 1, escalatingBlinds) * 2;
         _master = NewInternalList();
         foreach (var p in players)
             ListAdd(_master, InternalCtor.Invoke(new object[] { p }));
@@ -69,7 +76,7 @@ public sealed class TournamentSession
             throw new InvalidOperationException("Tournament already finished.");
 
         cancellationToken.ThrowIfCancellationRequested();
-        var before = GetStacks();
+        var before = GetStacksList();
 
         var alive = NewInternalList();
         var shiftedCount = ListCount(_shifted);
@@ -88,28 +95,46 @@ public sealed class TournamentSession
         ListAdd(alive, button);
 
         _handNumber++;
-        var hand = HandCtor.Invoke(new[] { alive, _handNumber, _smallBlind });
+        var smallThisHand = TournamentBlindSchedule.SmallBlindForHand(_baseSmallBlind, _handNumber, _escalatingBlinds);
+        CurrentHandBigBlind = smallThisHand * 2;
+        var hand = HandCtor.Invoke(new[] { alive, _handNumber, smallThisHand });
         ((IHandLogic)hand).Play();
         _shifted = alive;
 
-        var after = GetStacks();
-        var winners = after
-            .Where(kv => kv.Value > before.GetValueOrDefault(kv.Key))
-            .OrderByDescending(kv => kv.Value - before.GetValueOrDefault(kv.Key))
-            .Select(kv => kv.Key)
+        var after = GetStacksList();
+        var gains = new List<(int Index, string Name, int Gain)>();
+        for (var i = 0; i < after.Count; i++)
+        {
+            var g = after[i].Stack - before[i].Stack;
+            if (g > 0)
+                gains.Add((i, after[i].Name, g));
+        }
+
+        var winners = gains
+            .OrderByDescending(x => x.Gain)
+            .ThenBy(x => x.Index)
+            .Select(x => x.Name)
             .ToList();
 
         if (winners.Count == 0)
         {
-            var maxStack = after.Values.Max();
-            winners = after.Where(kv => kv.Value == maxStack).Select(kv => kv.Key).ToList();
+            var maxStack = after.Max(x => x.Stack);
+            winners = after.Where(x => x.Stack == maxStack).Select(x => x.Name).ToList();
         }
 
         var finished = IsFinished;
         string? tournamentWinner = null;
         if (finished)
         {
-            tournamentWinner = after.FirstOrDefault(kv => kv.Value > 0).Key;
+            foreach (var x in after)
+            {
+                if (x.Stack > 0)
+                {
+                    tournamentWinner = x.Name;
+                    break;
+                }
+            }
+
             if (!_endGameSent && !string.IsNullOrWhiteSpace(tournamentWinner))
             {
                 var mc = ListCount(_master);
@@ -122,17 +147,17 @@ public sealed class TournamentSession
         return new HandSummary(_handNumber, winners, after, finished, tournamentWinner);
     }
 
-    private Dictionary<string, int> GetStacks()
+    private List<(string Name, int Stack)> GetStacksList()
     {
-        var result = new Dictionary<string, int>(StringComparer.Ordinal);
         var c = ListCount(_master);
+        var list = new List<(string, int)>(c);
         for (var i = 0; i < c; i++)
         {
             var ip = ListGet(_master, i);
-            result[GetWrappedPlayer(ip).Name] = GetStack(ip);
+            list.Add((GetWrappedPlayer(ip).Name, GetStack(ip)));
         }
 
-        return result;
+        return list;
     }
 
     private static int AliveCount(object list)

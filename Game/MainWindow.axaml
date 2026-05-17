@@ -36,12 +36,20 @@
     </Design.DataContext>
 
     <Grid RowDefinitions="Auto,*" Margin="12">
-        <Button Grid.Row="0"
-                Classes="danger-btn"
-                Content="Exit to main menu"
-                HorizontalAlignment="Right"
-                Margin="0,0,0,8"
-                Click="OnExitToMenuClick" />
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+            <TextBlock Grid.Column="0"
+                       Text="{Binding SeriesProgressText}"
+                       IsVisible="{Binding SeriesProgressVisible}"
+                       VerticalAlignment="Center"
+                       Foreground="#c8d8e8"
+                       FontSize="17"
+                       FontWeight="SemiBold" />
+            <Button Grid.Column="1"
+                    Classes="danger-btn"
+                    Content="{Binding ExitMenuButtonText}"
+                    HorizontalAlignment="Right"
+                    Click="OnExitToMenuClick" />
+        </Grid>
         <Grid Grid.Row="1" ColumnDefinitions="65*,35*" RowDefinitions="80*,20*">
         <Border Grid.Row="0" Grid.Column="0" Background="#232833" CornerRadius="10" Padding="10" Margin="0,0,10,10">
             <Viewbox Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -111,7 +119,7 @@
                         </StackPanel>
                     </Border>
 
-                    <Grid Grid.Row="2" Margin="0,10,0,0" Width="320">
+                    <Grid Grid.Row="2" Margin="0,10,0,0" Width="320" IsVisible="{Binding HumanPanelVisible}">
                         <Border Padding="12" CornerRadius="8"
                                 Background="#2d3546" BorderBrush="{Binding HumanSeat.FrameBrush}" BorderThickness="2"
                                 Opacity="{Binding HumanSeat.SeatOpacity}">
@@ -207,10 +215,10 @@
             </DockPanel>
         </Border>
 
-        <Border Grid.Row="1" Grid.Column="0" Background="#252a33" CornerRadius="10" Padding="14" Margin="0,0,10,0">
+        <Border Grid.Row="1" Grid.Column="0" Background="#252a33" CornerRadius="10" Padding="14" Margin="0,0,10,0" IsVisible="{Binding ShowBottomDock}">
             <Viewbox Stretch="Uniform" HorizontalAlignment="Center">
                 <Grid Width="760" Height="150">
-                    <Grid RowDefinitions="Auto,Auto,Auto,Auto" ColumnDefinitions="Auto,Auto,Auto,Auto,*" IsVisible="{Binding !IsReplayMode}">
+                    <Grid RowDefinitions="Auto,Auto,Auto,Auto" ColumnDefinitions="Auto,Auto,Auto,Auto,*" IsVisible="{Binding ShowHumanActionPanel}">
                         <TextBlock Grid.Row="0" Grid.ColumnSpan="5" Text="Your action" Foreground="#e8eaed" FontWeight="SemiBold" FontSize="20" />
                         <TextBlock Grid.Row="1" Grid.Column="0" Foreground="#9aa0a6" Margin="0,8,8,8" Text="To call:" FontSize="16" />
                         <TextBlock Grid.Row="1" Grid.Column="1" Foreground="#e8eaed" Margin="0,8,18,8" Text="{Binding ToCall}" FontSize="18" />

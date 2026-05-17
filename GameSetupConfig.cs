@@ -10,18 +10,25 @@ public enum BotType
 
 public sealed record LlmPersonalitySnapshot(int? Id, string Name, string Description);
 
-public sealed record BotSetup(string Name, BotType Type, LlmPersonalitySnapshot? LlmPersonality = null);
+public sealed record OpenAiPresetSnapshot(int Id, string Name, string ApiUrl, string ApiKey, string ModelName);
+
+public sealed record BotSetup(
+    string Name,
+    BotType Type,
+    LlmPersonalitySnapshot? LlmPersonality = null,
+    OpenAiPresetSnapshot? OpenAiPreset = null);
 
 public sealed record GameSetupConfig(
     int BuyIn,
     int SmallBlind,
     IReadOnlyList<BotSetup> Bots,
-    string? LlmApiUrl = null,
-    string? LlmApiKey = null,
-    string LlmModel = "qwen/qwen3-32b",
-    double LlmTemperature = 0)
+    double LlmTemperature = 0,
+    bool SpectatorSeriesMode = false,
+    int? SeriesTournamentNumber = null,
+    int? SeriesTournamentTotal = null)
 {
     public int BigBlind => SmallBlind * 2;
+
     public bool UsesLlm => Bots.Any(b => b.Type == BotType.LlmBotPlayer);
 
     public static GameSetupConfig CreateDefault() =>
@@ -33,7 +40,5 @@ public sealed record GameSetupConfig(
                 new BotSetup("Bot B", BotType.RandomBotPlayer),
                 new BotSetup("Bot C", BotType.RandomBotPlayer),
             ],
-            LlmApiUrl: "https://api.groq.com/openai/v1",
-            LlmApiKey: "",
-            LlmModel: "qwen/qwen3-32b");
+            LlmTemperature: 0);
 }

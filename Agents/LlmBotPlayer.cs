@@ -8,18 +8,18 @@ public sealed class LlmBotPlayer : BasePlayer
     private readonly IGameUi _ui;
     private readonly OpenAiCompatClient _client;
     private readonly LlmPersonalitySnapshot? _personality;
-    private readonly int _bigBlind;
+    private readonly OpenAiPresetSnapshot? _preset;
     private readonly Dictionary<string, List<string>> _handHistoryByStreet = new(StringComparer.Ordinal);
     private IReadOnlyList<Card> _currentBoard = Array.Empty<Card>();
     private string _currentStreet = "Pre-Flop";
 
-    public LlmBotPlayer(string name, IGameUi ui, OpenAiCompatClient client, int bigBlind, LlmPersonalitySnapshot? personality = null)
+    public LlmBotPlayer(string name, IGameUi ui, OpenAiCompatClient client, LlmPersonalitySnapshot? personality = null, OpenAiPresetSnapshot? preset = null)
     {
         Name = name;
         _ui = ui;
         _client = client;
-        _bigBlind = bigBlind;
         _personality = personality;
+        _preset = preset;
     }
 
     public override string Name { get; }
@@ -54,7 +54,10 @@ public sealed class LlmBotPlayer : BasePlayer
             stack = context.MoneyLeft,
             cards = new[] { CardJson(FirstCard), CardJson(SecondCard) },
             llm_personality_id = _personality?.Id,
-            llm_personality_name = string.IsNullOrWhiteSpace(_personality?.Name) ? null : _personality.Name
+            llm_personality_name = string.IsNullOrWhiteSpace(_personality?.Name) ? null : _personality.Name,
+            openai_preset_id = _preset?.Id,
+            openai_preset_name = string.IsNullOrWhiteSpace(_preset?.Name) ? null : _preset.Name,
+            openai_model_name = string.IsNullOrWhiteSpace(_preset?.ModelName) ? null : _preset.ModelName
         });
     }
 
@@ -83,7 +86,8 @@ public sealed class LlmBotPlayer : BasePlayer
     public override PlayerAction GetTurn(IGetTurnContext context)
     {
         _ui.SetCurrentTurn(Name);
-        var possible = BuildPossibleActions(context, _bigBlind);
+        var bigBlind = _ui.CurrentHandBigBlind;
+        var possible = BuildPossibleActions(context, bigBlind);
 
         if (possible.HasSingleLegalAction)
             return FinalizeAction(context, possible.SingleLegalAction, null, null);
@@ -91,7 +95,7 @@ public sealed class LlmBotPlayer : BasePlayer
         var ownCards = new List<Card> { FirstCard, SecondCard };
         var userPrompt = LlmPrompts.BuildUserPrompt(
             context,
-            _bigBlind,
+            bigBlind,
             Name,
             ownCards,
             _currentBoard,
@@ -188,7 +192,10 @@ public sealed class LlmBotPlayer : BasePlayer
             prompt_before_action = promptBefore,
             thought_before_action = thoughtBefore,
             llm_personality_id = _personality?.Id,
-            llm_personality_name = string.IsNullOrWhiteSpace(_personality?.Name) ? null : _personality.Name
+            llm_personality_name = string.IsNullOrWhiteSpace(_personality?.Name) ? null : _personality.Name,
+            openai_preset_id = _preset?.Id,
+            openai_preset_name = string.IsNullOrWhiteSpace(_preset?.Name) ? null : _preset.Name,
+            openai_model_name = string.IsNullOrWhiteSpace(_preset?.ModelName) ? null : _preset.ModelName
         });
         return action;
     }

@@ -2,26 +2,31 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Microsoft.EntityFrameworkCore;
 
 namespace PokerApp;
 
 public partial class MainMenuWindow : Window
 {
-    private sealed class ReplayHandListItem
-    {
-        public int Id { get; init; }
-        public string Name { get; init; } = "";
-        public string ReplayJson { get; init; } = "";
-        public string DisplayLabel { get; init; } = "";
-        public override string ToString() => DisplayLabel;
-    }
-
     private sealed class PersonalityPickItem
     {
         public int? Id { get; init; }
         public string Name { get; init; } = "";
         public string Description { get; init; } = "";
+        public string Label { get; init; } = "";
+
+        public override string ToString() => Label;
+    }
+
+    private sealed class PresetPickItem
+    {
+        public int? Id { get; init; }
+        public string Name { get; init; } = "";
+        public string ApiUrl { get; init; } = "";
+        public string ApiKey { get; init; } = "";
+        public string ModelName { get; init; } = "";
         public string Label { get; init; } = "";
 
         public override string ToString() => Label;
@@ -35,6 +40,8 @@ public partial class MainMenuWindow : Window
     private string? _pendingReplayJson;
     private bool _handSaveInFlight;
     private bool _showingReplayHandResult;
+    private DispatcherTimer? _seriesSetupPrefsSaveDebounce;
+    private bool _applyingSeriesSetupPrefs;
 
     public MainMenuWindow()
     {
@@ -42,20 +49,305 @@ public partial class MainMenuWindow : Window
         WindowState = WindowState.Maximized;
         BuyInTextBox.Text = GameConstants.DefaultBuyIn.ToString();
         SmallBlindTextBox.Text = GameConstants.DefaultSmallBlind.ToString();
+        GameModeComboBox.SelectedIndex = 0;
+        ReplaySourceComboBox.SelectedIndex = 0;
+        FillBotCountComboItems(playMode: true);
         BotCountComboBox.SelectedIndex = 2;
         Bot1TypeComboBox.SelectedIndex = 0;
         Bot2TypeComboBox.SelectedIndex = 0;
         Bot3TypeComboBox.SelectedIndex = 0;
+        Bot4TypeComboBox.SelectedIndex = 0;
+        Bot5TypeComboBox.SelectedIndex = 0;
+        Bot6TypeComboBox.SelectedIndex = 0;
         SetDefaultBotNames();
-        ApiUrlTextBox.Text = "https://api.groq.com/openai/v1";
-        ModelTextBox.Text = "qwen/qwen3-32b";
-        ApiKeyTextBox.Text = "";
+        SeriesFieldsPanel.IsVisible = false;
         RefreshBigBlindInfo();
         RefreshBotRows();
-        RefreshLlmConfigState();
         RefreshPersonalityComboBoxes();
+        RefreshPresetComboBoxes();
         LoadMenuBackground();
+        HideSmallPotReplaysCheckBox.Content = $"Hide hands with max pot under {GameConstants.HighPotChipsThreshold}";
+        WireSeriesSetupPreferencesAutosave();
         Closed += (_, _) => _menuBackgroundBitmap?.Dispose();
+    }
+
+    private bool IsSeriesSetupMode() => GameModeComboBox.SelectedIndex == 1;
+
+    private void WireSeriesSetupPreferencesAutosave()
+    {
+        void onTextChanged(object? _, TextChangedEventArgs __) => ScheduleSaveSeriesSetupPreferences();
+
+        SeriesNameTextBox.TextChanged += onTextChanged;
+        SeriesTournamentCountTextBox.TextChanged += onTextChanged;
+        BuyInTextBox.TextChanged += onTextChanged;
+
+        for (var i = 0; i < 6; i++)
+            BotNameTextBoxForIndex(i).TextChanged += onTextChanged;
+
+        foreach (var c in AllPersonalityCombos())
+            c.SelectionChanged += (_, _) => ScheduleSaveSeriesSetupPreferences();
+
+        foreach (var c in AllPresetCombos())
+            c.SelectionChanged += (_, _) => ScheduleSaveSeriesSetupPreferences();
+    }
+
+    private void ScheduleSaveSeriesSetupPreferences()
+    {
+        if (_applyingSeriesSetupPrefs || !IsSeriesSetupMode())
+            return;
+
+        if (_seriesSetupPrefsSaveDebounce is null)
+        {
+            _seriesSetupPrefsSaveDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(450) };
+            _seriesSetupPrefsSaveDebounce.Tick += OnSeriesSetupPrefsDebounceTick;
+        }
+
+        _seriesSetupPrefsSaveDebounce.Stop();
+        _seriesSetupPrefsSaveDebounce.Start();
+    }
+
+    private async void OnSeriesSetupPrefsDebounceTick(object? sender, EventArgs e)
+    {
+        if (_seriesSetupPrefsSaveDebounce is null)
+            return;
+        _seriesSetupPrefsSaveDebounce.Stop();
+        if (!IsSeriesSetupMode() || _applyingSeriesSetupPrefs)
+            return;
+
+        try
+        {
+            var payload = CaptureSeriesSetupPayloadFromUi();
+            await TournamentSeriesSetupPreferencesStore.SaveAsync(payload);
+        }
+        catch
+        {
+        }
+    }
+
+    private TournamentSeriesSetupOptionsPayload CaptureSeriesSetupPayloadFromUi()
+    {
+        var bots = new List<TournamentSeriesSetupBotPayload>();
+        for (var i = 0; i < 6; i++)
+        {
+            var type = GetBotTypeForIndex(i);
+            var name = BotNameTextBoxForIndex(i).Text?.Trim() ?? "";
+            int? personalityId = null;
+            if (BotPersonalityComboForIndex(i).SelectedItem is PersonalityPickItem pp && pp.Id != null)
+                personalityId = pp.Id;
+            int? presetId = null;
+            if (BotPresetComboForIndex(i).SelectedItem is PresetPickItem pr && pr.Id != null)
+                presetId = pr.Id.Value;
+
+            bots.Add(new TournamentSeriesSetupBotPayload
+            {
+                Type = type == BotType.LlmBotPlayer ? "LlmBotPlayer" : "RandomBotPlayer",
+                Name = name,
+                PersonalityId = personalityId,
+                PresetId = presetId
+            });
+        }
+
+        return new TournamentSeriesSetupOptionsPayload
+        {
+            SeriesName = SeriesNameTextBox.Text?.Trim() ?? "",
+            TournamentCount = int.TryParse(SeriesTournamentCountTextBox.Text, out var tc) ? tc : 5,
+            BuyIn = int.TryParse(BuyInTextBox.Text, out var bi) ? bi : GameConstants.DefaultBuyIn,
+            SmallBlind = int.TryParse(SmallBlindTextBox.Text, out var sb) ? sb : GameConstants.DefaultSmallBlind,
+            BotCount = GetSelectedBotCount(),
+            Bots = bots
+        };
+    }
+
+    private async void TryApplySeriesSetupPreferencesFromDb()
+    {
+        if (!IsSeriesSetupMode())
+            return;
+
+        TournamentSeriesSetupOptionsPayload? payload;
+        try
+        {
+            payload = await TournamentSeriesSetupPreferencesStore.TryLoadAsync();
+        }
+        catch
+        {
+            return;
+        }
+
+        if (payload is null)
+            return;
+
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            _applyingSeriesSetupPrefs = true;
+            try
+            {
+                SeriesNameTextBox.Text = payload.SeriesName;
+                SeriesTournamentCountTextBox.Text = payload.TournamentCount.ToString();
+                BuyInTextBox.Text = payload.BuyIn.ToString();
+                SmallBlindTextBox.Text = payload.SmallBlind.ToString();
+                RefreshBigBlindInfo();
+
+                var botCount = Math.Clamp(payload.BotCount, 2, 6);
+                var botIdx = botCount - 2;
+                if (botIdx >= 0 && botIdx < BotCountComboBox.Items.Count)
+                    BotCountComboBox.SelectedIndex = botIdx;
+
+                RefreshBotRows();
+
+                for (var i = 0; i < 6; i++)
+                {
+                    var slot = i < payload.Bots.Count ? payload.Bots[i] : null;
+                    var typeCombo = BotTypeComboForIndex(i);
+                    var wantLlm = string.Equals(slot?.Type, "LlmBotPlayer", StringComparison.Ordinal);
+                    typeCombo.SelectedIndex = wantLlm ? 1 : 0;
+
+                    var nameBox = BotNameTextBoxForIndex(i);
+                    if (slot is not null && !string.IsNullOrWhiteSpace(slot.Name))
+                        nameBox.Text = slot.Name;
+                    else
+                        SyncBotNameToType(nameBox, i, GetBotTypeForIndex(i));
+                }
+
+                RefreshPersonalityComboEnabledState();
+                RefreshPresetComboEnabledState();
+
+                for (var i = 0; i < 6; i++)
+                {
+                    var slot = i < payload.Bots.Count ? payload.Bots[i] : null;
+                    SelectPersonalityById(BotPersonalityComboForIndex(i), slot?.PersonalityId);
+                    SelectPresetById(BotPresetComboForIndex(i), slot?.PresetId);
+                }
+            }
+            finally
+            {
+                _applyingSeriesSetupPrefs = false;
+            }
+        });
+    }
+
+    private static void SelectPersonalityById(ComboBox combo, int? personalityId)
+    {
+        if (personalityId is null)
+        {
+            combo.SelectedIndex = 0;
+            return;
+        }
+
+        if (combo.ItemsSource is not IEnumerable<PersonalityPickItem> items)
+        {
+            combo.SelectedIndex = 0;
+            return;
+        }
+
+        var idx = 0;
+        foreach (var p in items)
+        {
+            if (p.Id == personalityId)
+            {
+                combo.SelectedIndex = idx;
+                return;
+            }
+
+            idx++;
+        }
+
+        combo.SelectedIndex = 0;
+    }
+
+    private static void SelectPresetById(ComboBox combo, int? presetId)
+    {
+        if (presetId is null)
+        {
+            combo.SelectedIndex = 0;
+            return;
+        }
+
+        if (combo.ItemsSource is not IEnumerable<PresetPickItem> items)
+        {
+            combo.SelectedIndex = 0;
+            return;
+        }
+
+        var idx = 0;
+        foreach (var p in items)
+        {
+            if (p.Id == presetId)
+            {
+                combo.SelectedIndex = idx;
+                return;
+            }
+
+            idx++;
+        }
+
+        combo.SelectedIndex = 0;
+    }
+
+    private async void OnClearSeriesSetupPrefsClick(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await TournamentSeriesSetupPreferencesStore.ClearAsync();
+        }
+        catch
+        {
+        }
+
+        if (!IsSeriesSetupMode())
+            return;
+
+        _applyingSeriesSetupPrefs = true;
+        try
+        {
+            SeriesNameTextBox.Text = "";
+            SeriesTournamentCountTextBox.Text = "5";
+            BuyInTextBox.Text = GameConstants.DefaultBuyIn.ToString();
+            SmallBlindTextBox.Text = GameConstants.DefaultSmallBlind.ToString();
+            RefreshBigBlindInfo();
+            FillBotCountComboItems(playMode: false);
+            BotCountComboBox.SelectedIndex = 2;
+            RefreshBotRows();
+            for (var i = 0; i < 6; i++)
+            {
+                BotTypeComboForIndex(i).SelectedIndex = 0;
+                SyncBotNameToType(BotNameTextBoxForIndex(i), i, BotType.RandomBotPlayer);
+            }
+
+            RefreshPersonalityComboBoxes();
+            RefreshPresetComboBoxes();
+        }
+        finally
+        {
+            _applyingSeriesSetupPrefs = false;
+        }
+    }
+
+    private void FillBotCountComboItems(bool playMode)
+    {
+        BotCountComboBox.Items.Clear();
+        if (playMode)
+        {
+            for (var i = 1; i <= 3; i++)
+                BotCountComboBox.Items.Add(new ComboBoxItem { Content = i.ToString() });
+        }
+        else
+        {
+            for (var i = 2; i <= 6; i++)
+                BotCountComboBox.Items.Add(new ComboBoxItem { Content = i.ToString() });
+        }
+    }
+
+    private void OnGameModeChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        var series = IsSeriesSetupMode();
+        SeriesFieldsPanel.IsVisible = series;
+        FillBotCountComboItems(playMode: !series);
+        BotCountComboBox.SelectedIndex = series ? 4 : 2;
+        RefreshBotRows();
+        RefreshPersonalityComboBoxes();
+        RefreshPresetComboBoxes();
+        if (series)
+            TryApplySeriesSetupPreferencesFromDb();
     }
 
     private void OnStartGamePressed(object? sender, PointerPressedEventArgs e)
@@ -64,6 +356,9 @@ public partial class MainMenuWindow : Window
             return;
         SetupErrorTextBlock.Text = string.Empty;
         RefreshPersonalityComboBoxes();
+        RefreshPresetComboBoxes();
+        if (IsSeriesSetupMode())
+            TryApplySeriesSetupPreferencesFromDb();
         SetOverlay(setupVisible: true, winnerVisible: false, handVisible: false);
     }
 
@@ -76,11 +371,58 @@ public partial class MainMenuWindow : Window
         PersonalitiesHost.IsVisible = true;
     }
 
+    private void OnPresetsPressed(object? sender, PointerPressedEventArgs e)
+    {
+        PresetsHost.Content = new PresetsView { NavigateBack = LeavePresetsView };
+        MenuLayer.IsVisible = false;
+        PresetsHost.IsVisible = true;
+    }
+
     private async void OnViewReplayPressed(object? sender, PointerPressedEventArgs e)
     {
         ReplayErrorTextBlock.Text = string.Empty;
-        await LoadReplayListAsync();
+        ReplaySourceComboBox.SelectedIndex = 0;
+        UpdateReplayPanelVisibility();
+        await LoadStandaloneReplaysAsync();
+        await LoadSeriesListAsync();
         SetOverlay(setupVisible: false, winnerVisible: false, handVisible: false, replayListVisible: true);
+    }
+
+    private void UpdateReplayPanelVisibility()
+    {
+        var standalone = ReplaySourceComboBox.SelectedIndex <= 0;
+        StandaloneReplayDock.IsVisible = standalone;
+        SeriesReplayRoot.IsVisible = !standalone;
+        if (standalone)
+            SeriesStatsTextBlock.Text = string.Empty;
+    }
+
+    private async void OnReplaySourceChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        UpdateReplayPanelVisibility();
+        if (StandaloneReplayDock.IsVisible)
+            await LoadStandaloneReplaysAsync();
+        else
+            await LoadSeriesListAsync();
+    }
+
+    private async void OnReplaySeriesSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (ReplaySeriesListBox.SelectedItem is TournamentSeriesListItem sel)
+        {
+            await LoadSeriesHandsAsync(sel.Id);
+            await RefreshSeriesStatsAsync(sel.Id);
+        }
+    }
+
+    private async void OnHideSmallPotReplaysChanged(object? sender, RoutedEventArgs e)
+    {
+        if (StandaloneReplayDock.IsVisible)
+            await LoadStandaloneReplaysAsync();
+        else if (ReplaySeriesListBox.SelectedItem is TournamentSeriesListItem sel)
+            await LoadSeriesHandsAsync(sel.Id);
+        else
+            await LoadSeriesListAsync();
     }
 
     private void OnCloseReplayListPressed(object? sender, PointerPressedEventArgs e)
@@ -91,13 +433,25 @@ public partial class MainMenuWindow : Window
     private void OnOpenReplayPressed(object? sender, PointerPressedEventArgs e)
     {
         ReplayErrorTextBlock.Text = string.Empty;
-        if (ReplayHandsListBox.SelectedItem is not ReplayHandListItem item)
+        string? json = null;
+        if (StandaloneReplayDock.IsVisible)
+        {
+            if (ReplayHandsListBox.SelectedItem is StandaloneReplayListItem s)
+                json = s.ReplayJson;
+        }
+        else
+        {
+            if (ReplaySeriesHandsListBox.SelectedItem is SeriesHandReplayItem h)
+                json = h.ReplayJson;
+        }
+
+        if (string.IsNullOrEmpty(json))
         {
             ReplayErrorTextBlock.Text = "Select a replay first.";
             return;
         }
 
-        _gameView = BuildReplayView(item);
+        _gameView = BuildReplayView(json);
         GameHost.Content = _gameView;
         GameHost.IsVisible = true;
         MenuLayer.IsVisible = false;
@@ -110,6 +464,14 @@ public partial class MainMenuWindow : Window
         PersonalitiesHost.IsVisible = false;
         MenuLayer.IsVisible = true;
         RefreshPersonalityComboBoxes();
+    }
+
+    private void LeavePresetsView()
+    {
+        PresetsHost.Content = null;
+        PresetsHost.IsVisible = false;
+        MenuLayer.IsVisible = true;
+        RefreshPresetComboBoxes();
     }
 
     private void OnCancelSetupPressed(object? sender, PointerPressedEventArgs e)
@@ -140,11 +502,23 @@ public partial class MainMenuWindow : Window
             return;
         }
 
+        var seriesMode = IsSeriesSetupMode();
         var botCount = GetSelectedBotCount();
-        if (botCount < 1 || botCount > 3)
+        if (seriesMode)
         {
-            SetupErrorTextBlock.Text = "Choose between 1 and 3 bots.";
-            return;
+            if (botCount < 2 || botCount > 6)
+            {
+                SetupErrorTextBlock.Text = "Choose between 2 and 6 bots.";
+                return;
+            }
+        }
+        else
+        {
+            if (botCount < 1 || botCount > 3)
+            {
+                SetupErrorTextBlock.Text = "Choose between 1 and 3 bots.";
+                return;
+            }
         }
 
         var bots = new List<BotSetup>();
@@ -157,36 +531,53 @@ public partial class MainMenuWindow : Window
                 SetupErrorTextBlock.Text = $"Bot {i + 1} name cannot be empty.";
                 return;
             }
+
             var personality = GetLlmPersonalitySnapshotForBotIndex(i);
-            bots.Add(new BotSetup(botName, botType, personality));
+            var preset = GetOpenAiPresetSnapshotForBotIndex(i);
+            if (botType == BotType.LlmBotPlayer && preset is null)
+            {
+                SetupErrorTextBlock.Text = $"Bot {i + 1} needs an OpenAI preset.";
+                return;
+            }
+
+            bots.Add(new BotSetup(botName, botType, personality, preset));
         }
 
-        var usesLlm = bots.Any(b => b.Type == BotType.LlmBotPlayer);
-        var apiUrl = ApiUrlTextBox.Text?.Trim();
-        var apiKey = ApiKeyTextBox.Text?.Trim();
-        var model = ModelTextBox.Text?.Trim();
-        if (usesLlm)
+        if (seriesMode)
         {
-            if (string.IsNullOrWhiteSpace(apiUrl))
+            var sname = SeriesNameTextBox.Text?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(sname))
             {
-                SetupErrorTextBlock.Text = "Provide API URL when at least one LLM bot is selected.";
+                SetupErrorTextBlock.Text = "Series name is required.";
                 return;
             }
-            if (string.IsNullOrWhiteSpace(model))
+
+            if (!int.TryParse(SeriesTournamentCountTextBox.Text, out var tCount) || tCount < 1)
             {
-                SetupErrorTextBlock.Text = "Provide model name when at least one LLM bot is selected.";
+                SetupErrorTextBlock.Text = "Tournament count must be at least 1.";
                 return;
             }
+
+            _gameCts = new CancellationTokenSource();
+            SetOverlay(setupVisible: false, winnerVisible: false, handVisible: false);
+            try
+            {
+                await RunSeriesGameLoopAsync(buyIn, smallBlind, bots, sname, tCount, _gameCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                FinishAbortedSeriesToMenu();
+            }
+            finally
+            {
+                _gameCts?.Dispose();
+                _gameCts = null;
+            }
+
+            return;
         }
 
-        var config = new GameSetupConfig(
-            buyIn,
-            smallBlind,
-            bots,
-            LlmApiUrl: apiUrl,
-            LlmApiKey: apiKey,
-            LlmModel: string.IsNullOrWhiteSpace(model) ? "qwen/qwen3-32b" : model,
-            LlmTemperature: 0);
+        var config = new GameSetupConfig(buyIn, smallBlind, bots, LlmTemperature: 0, SpectatorSeriesMode: false);
 
         _activeGameConfig = config;
         _gameCts = new CancellationTokenSource();
@@ -214,6 +605,117 @@ public partial class MainMenuWindow : Window
         }
     }
 
+    private async Task RunSeriesGameLoopAsync(
+        int buyIn,
+        int smallBlind,
+        List<BotSetup> botsTemplate,
+        string seriesName,
+        int tournamentCount,
+        CancellationToken ct)
+    {
+        PokerDbBootstrap.EnsureInitialized();
+        int seriesId;
+        await using (var db = PokerDbBootstrap.CreateContext())
+        {
+            var series = new TournamentSeries { Name = seriesName, CreatedAt = DateTimeOffset.UtcNow };
+            db.TournamentSeries.Add(series);
+            await db.SaveChangesAsync(ct);
+            seriesId = series.Id;
+        }
+
+        for (var t = 0; t < tournamentCount; t++)
+        {
+            ct.ThrowIfCancellationRequested();
+            int stId;
+            await using (var db = PokerDbBootstrap.CreateContext())
+            {
+                var st = new SeriesTournament { TournamentSeriesId = seriesId, TournamentIndex = t };
+                db.SeriesTournaments.Add(st);
+                await db.SaveChangesAsync(ct);
+                stId = st.Id;
+            }
+
+            var shuffled = botsTemplate.OrderBy(_ => Random.Shared.Next()).ToList();
+            var cfg = new GameSetupConfig(
+                buyIn,
+                smallBlind,
+                shuffled,
+                LlmTemperature: 0,
+                SpectatorSeriesMode: true,
+                SeriesTournamentNumber: t + 1,
+                SeriesTournamentTotal: tournamentCount);
+            _activeGameConfig = cfg;
+            var tmIdx = t;
+            _gameView = new MainWindow(cfg);
+            _gameView.TournamentFinished += OnSeriesInnerTournamentFinished;
+            _gameView.ExitToMenuRequested += OnGameExitToMenuRequested;
+            _gameView.HandFinishedAsync = (sum, json, tok) => SeriesHandFinishedAsync(sum, json, seriesId, stId, tmIdx, cfg, tok);
+            GameHost.Content = _gameView;
+            MenuLayer.IsVisible = false;
+            GameHost.IsVisible = true;
+
+            try
+            {
+                await _gameView.StartGameLoopAsync(ct);
+            }
+            catch (OperationCanceledException)
+            {
+                await HandPersistence.DiscardSeriesTournamentAsync(stId, CancellationToken.None);
+                throw;
+            }
+            finally
+            {
+                if (_gameView is not null)
+                {
+                    _gameView.TournamentFinished -= OnSeriesInnerTournamentFinished;
+                    _gameView.ExitToMenuRequested -= OnGameExitToMenuRequested;
+                }
+
+                _gameView = null;
+                GameHost.Content = null;
+            }
+        }
+
+        GameHost.IsVisible = false;
+        MenuLayer.IsVisible = true;
+        _activeGameConfig = null;
+        await TournamentSeriesStats.RecomputeAndSaveAsync(seriesId, ct);
+    }
+
+    private void OnSeriesInnerTournamentFinished(string _) { }
+
+    private static Task SeriesHandFinishedAsync(
+        HandSummary summary,
+        string json,
+        int seriesId,
+        int stId,
+        int tournamentIndexZeroBased,
+        GameSetupConfig cfg,
+        CancellationToken ct)
+    {
+        var handName = $"T{tournamentIndexZeroBased + 1} H{summary.HandNumber}";
+        var seats = BuildSeatRowsForSave(cfg);
+        return HandPersistence.SaveSeriesHandAsync(handName, json, seats, seriesId, stId, ct);
+    }
+
+    private void FinishAbortedSeriesToMenu()
+    {
+        if (_gameView is not null)
+        {
+            _gameView.TournamentFinished -= OnSeriesInnerTournamentFinished;
+            _gameView.TournamentFinished -= OnTournamentFinished;
+            _gameView.ExitToMenuRequested -= OnGameExitToMenuRequested;
+        }
+
+        _gameView = null;
+        GameHost.Content = null;
+        GameHost.IsVisible = false;
+        MenuLayer.IsVisible = true;
+        SetOverlay(setupVisible: false, winnerVisible: false, handVisible: false, exitConfirmVisible: false);
+        _activeGameConfig = null;
+        _pendingReplayJson = null;
+        _showingReplayHandResult = false;
+    }
 
     private void OnGameExitToMenuRequested()
     {
@@ -273,19 +775,40 @@ public partial class MainMenuWindow : Window
         _showingReplayHandResult = false;
     }
 
-    private void OnSmallBlindChanged(object? sender, TextChangedEventArgs e) => RefreshBigBlindInfo();
+    private void OnSmallBlindChanged(object? sender, TextChangedEventArgs e)
+    {
+        RefreshBigBlindInfo();
+        ScheduleSaveSeriesSetupPreferences();
+    }
 
     private void OnBotCountChanged(object? sender, SelectionChangedEventArgs e)
     {
         RefreshBotRows();
-        RefreshLlmConfigState();
+        if (_applyingSeriesSetupPrefs)
+        {
+            RefreshPersonalityComboEnabledState();
+            RefreshPresetComboEnabledState();
+            return;
+        }
+
+        RefreshPersonalityComboBoxes();
+        RefreshPresetComboBoxes();
+        ScheduleSaveSeriesSetupPreferences();
     }
 
     private void OnBotTypeChanged(object? sender, SelectionChangedEventArgs e)
     {
+        if (_applyingSeriesSetupPrefs)
+        {
+            RefreshPersonalityComboEnabledState();
+            RefreshPresetComboEnabledState();
+            return;
+        }
+
         SyncDefaultBotNamesToTypes();
-        RefreshLlmConfigState();
         RefreshPersonalityComboEnabledState();
+        RefreshPresetComboEnabledState();
+        ScheduleSaveSeriesSetupPreferences();
     }
 
     private int GetSelectedBotCount()
@@ -310,10 +833,15 @@ public partial class MainMenuWindow : Window
     private void RefreshBotRows()
     {
         var count = GetSelectedBotCount();
+        var series = IsSeriesSetupMode();
         Bot1Row.IsVisible = count >= 1;
         Bot2Row.IsVisible = count >= 2;
         Bot3Row.IsVisible = count >= 3;
+        Bot4Row.IsVisible = series && count >= 4;
+        Bot5Row.IsVisible = series && count >= 5;
+        Bot6Row.IsVisible = series && count >= 6;
         RefreshPersonalityComboEnabledState();
+        RefreshPresetComboEnabledState();
     }
 
     private void RefreshPersonalityComboBoxes()
@@ -342,28 +870,84 @@ public partial class MainMenuWindow : Window
         }
 
         var arr = items.ToArray();
-        Bot1PersonalityComboBox.ItemsSource = arr;
-        Bot2PersonalityComboBox.ItemsSource = arr;
-        Bot3PersonalityComboBox.ItemsSource = arr;
-        Bot1PersonalityComboBox.SelectedIndex = 0;
-        Bot2PersonalityComboBox.SelectedIndex = 0;
-        Bot3PersonalityComboBox.SelectedIndex = 0;
+        foreach (var c in AllPersonalityCombos())
+        {
+            c.ItemsSource = arr;
+            c.SelectedIndex = 0;
+        }
+
         RefreshPersonalityComboEnabledState();
+    }
+
+    private void RefreshPresetComboBoxes()
+    {
+        var items = new List<PresetPickItem>
+        {
+            new() { Label = "(None)" }
+        };
+        try
+        {
+            PokerDbBootstrap.EnsureInitialized();
+            using var db = PokerDbBootstrap.CreateContext();
+            foreach (var p in db.OpenAiPresets.AsNoTracking().OrderBy(x => x.Name))
+            {
+                items.Add(new PresetPickItem
+                {
+                    Id = p.Id,
+                    Name = p.Name,
+                    ApiUrl = p.ApiUrl,
+                    ApiKey = p.ApiKey,
+                    ModelName = p.ModelName,
+                    Label = p.Name
+                });
+            }
+        }
+        catch
+        {
+        }
+
+        var arr = items.ToArray();
+        foreach (var c in AllPresetCombos())
+        {
+            c.ItemsSource = arr;
+            c.SelectedIndex = 0;
+        }
+
+        RefreshPresetComboEnabledState();
+    }
+
+    private IEnumerable<ComboBox> AllPersonalityCombos()
+    {
+        yield return Bot1PersonalityComboBox;
+        yield return Bot2PersonalityComboBox;
+        yield return Bot3PersonalityComboBox;
+        yield return Bot4PersonalityComboBox;
+        yield return Bot5PersonalityComboBox;
+        yield return Bot6PersonalityComboBox;
+    }
+
+    private IEnumerable<ComboBox> AllPresetCombos()
+    {
+        yield return Bot1PresetComboBox;
+        yield return Bot2PresetComboBox;
+        yield return Bot3PresetComboBox;
+        yield return Bot4PresetComboBox;
+        yield return Bot5PresetComboBox;
+        yield return Bot6PresetComboBox;
     }
 
     private void RefreshPersonalityComboEnabledState()
     {
         var count = GetSelectedBotCount();
-        Bot1PersonalityComboBox.IsEnabled = count >= 1 && GetBotTypeForIndex(0) == BotType.LlmBotPlayer;
-        Bot2PersonalityComboBox.IsEnabled = count >= 2 && GetBotTypeForIndex(1) == BotType.LlmBotPlayer;
-        Bot3PersonalityComboBox.IsEnabled = count >= 3 && GetBotTypeForIndex(2) == BotType.LlmBotPlayer;
+        for (var i = 0; i < 6; i++)
+            BotPersonalityComboForIndex(i).IsEnabled = i < count && GetBotTypeForIndex(i) == BotType.LlmBotPlayer;
     }
 
-    private void RefreshLlmConfigState()
+    private void RefreshPresetComboEnabledState()
     {
-        var usesLlm = AnyVisibleLlmBotSelected();
-        LlmConfigPanel.IsEnabled = usesLlm;
-        LlmConfigPanel.Opacity = usesLlm ? 1 : 0.45;
+        var count = GetSelectedBotCount();
+        for (var i = 0; i < 6; i++)
+            BotPresetComboForIndex(i).IsEnabled = i < count && GetBotTypeForIndex(i) == BotType.LlmBotPlayer;
     }
 
     private async Task OnHandFinishedAsync(HandSummary summary, string replayJson, CancellationToken cancellationToken)
@@ -436,16 +1020,15 @@ public partial class MainMenuWindow : Window
             SaveHandCheckBox.IsChecked = !(SaveHandCheckBox.IsChecked ?? false);
     }
 
-    private static List<(string Name, string PlayerType, int? LlmPersonalityId)> BuildSeatRowsForSave(GameSetupConfig config)
+    private static List<(string Name, string PlayerType, int? LlmPersonalityId, int? OpenAiPresetId)> BuildSeatRowsForSave(GameSetupConfig config)
     {
-        var list = new List<(string, string, int?)>
-        {
-            (GameConstants.HumanPlayerName, "HUMAN", null)
-        };
+        var list = new List<(string, string, int?, int?)>();
+        if (!config.SpectatorSeriesMode)
+            list.Add((GameConstants.HumanPlayerName, "HUMAN", null, null));
         foreach (var b in config.Bots)
         {
             var t = b.Type == BotType.LlmBotPlayer ? "LLM_AGENT" : "RANDOM_BOT";
-            list.Add((b.Name, t, b.LlmPersonality?.Id));
+            list.Add((b.Name, t, b.LlmPersonality?.Id, b.OpenAiPreset?.Id));
         }
 
         return list;
@@ -478,7 +1061,46 @@ public partial class MainMenuWindow : Window
             0 => Bot1PersonalityComboBox,
             1 => Bot2PersonalityComboBox,
             2 => Bot3PersonalityComboBox,
+            3 => Bot4PersonalityComboBox,
+            4 => Bot5PersonalityComboBox,
+            5 => Bot6PersonalityComboBox,
             _ => Bot1PersonalityComboBox
+        };
+
+    private ComboBox BotPresetComboForIndex(int botIndex) =>
+        botIndex switch
+        {
+            0 => Bot1PresetComboBox,
+            1 => Bot2PresetComboBox,
+            2 => Bot3PresetComboBox,
+            3 => Bot4PresetComboBox,
+            4 => Bot5PresetComboBox,
+            5 => Bot6PresetComboBox,
+            _ => Bot1PresetComboBox
+        };
+
+    private ComboBox BotTypeComboForIndex(int botIndex) =>
+        botIndex switch
+        {
+            0 => Bot1TypeComboBox,
+            1 => Bot2TypeComboBox,
+            2 => Bot3TypeComboBox,
+            3 => Bot4TypeComboBox,
+            4 => Bot5TypeComboBox,
+            5 => Bot6TypeComboBox,
+            _ => Bot1TypeComboBox
+        };
+
+    private TextBox BotNameTextBoxForIndex(int botIndex) =>
+        botIndex switch
+        {
+            0 => Bot1NameTextBox,
+            1 => Bot2NameTextBox,
+            2 => Bot3NameTextBox,
+            3 => Bot4NameTextBox,
+            4 => Bot5NameTextBox,
+            5 => Bot6NameTextBox,
+            _ => Bot1NameTextBox
         };
 
     private LlmPersonalitySnapshot? GetLlmPersonalitySnapshotForBotIndex(int botIndex)
@@ -491,42 +1113,28 @@ public partial class MainMenuWindow : Window
         return null;
     }
 
+    private OpenAiPresetSnapshot? GetOpenAiPresetSnapshotForBotIndex(int botIndex)
+    {
+        if (GetBotTypeForIndex(botIndex) != BotType.LlmBotPlayer)
+            return null;
+        var combo = BotPresetComboForIndex(botIndex);
+        if (combo.SelectedItem is PresetPickItem pick && pick.Id != null)
+            return new OpenAiPresetSnapshot(pick.Id.Value, pick.Name, pick.ApiUrl, pick.ApiKey, pick.ModelName);
+        return null;
+    }
+
     private BotType GetBotTypeForIndex(int botIndex)
     {
-        var combo = botIndex switch
-        {
-            0 => Bot1TypeComboBox,
-            1 => Bot2TypeComboBox,
-            2 => Bot3TypeComboBox,
-            _ => Bot1TypeComboBox
-        };
+        var combo = BotTypeComboForIndex(botIndex);
         var content = (combo.SelectedItem as ComboBoxItem)?.Content?.ToString();
         return string.Equals(content, "LlmBotPlayer", StringComparison.Ordinal)
             ? BotType.LlmBotPlayer
             : BotType.RandomBotPlayer;
     }
 
-    private bool AnyVisibleLlmBotSelected()
-    {
-        var count = GetSelectedBotCount();
-        for (var i = 0; i < count; i++)
-        {
-            if (GetBotTypeForIndex(i) == BotType.LlmBotPlayer)
-                return true;
-        }
-        return false;
-    }
-
     private string GetBotNameForIndex(int botIndex, BotType type)
     {
-        var textBox = botIndex switch
-        {
-            0 => Bot1NameTextBox,
-            1 => Bot2NameTextBox,
-            2 => Bot3NameTextBox,
-            _ => Bot1NameTextBox
-        };
-
+        var textBox = BotNameTextBoxForIndex(botIndex);
         var value = textBox.Text?.Trim();
         if (!string.IsNullOrWhiteSpace(value))
             return value;
@@ -555,9 +1163,8 @@ public partial class MainMenuWindow : Window
 
     private void SyncDefaultBotNamesToTypes()
     {
-        SyncBotNameToType(Bot1NameTextBox, 0, GetBotTypeForIndex(0));
-        SyncBotNameToType(Bot2NameTextBox, 1, GetBotTypeForIndex(1));
-        SyncBotNameToType(Bot3NameTextBox, 2, GetBotTypeForIndex(2));
+        for (var i = 0; i < 6; i++)
+            SyncBotNameToType(BotNameTextBoxForIndex(i), i, GetBotTypeForIndex(i));
     }
 
     private void LoadMenuBackground()
@@ -576,29 +1183,177 @@ public partial class MainMenuWindow : Window
         }
     }
 
-    private async Task LoadReplayListAsync()
+    private async Task LoadStandaloneReplaysAsync()
     {
         PokerDbBootstrap.EnsureInitialized();
+        var hide = HideSmallPotReplaysCheckBox.IsChecked == true;
         await using var db = PokerDbBootstrap.CreateContext();
-        var hands = await db.SavedHands
+        var raw = await db.SavedHands
             .AsNoTracking()
+            .Where(h => h.TournamentSeriesId == null)
             .OrderByDescending(h => h.HandTimeIso)
-            .Select(h => new ReplayHandListItem
+            .ToListAsync();
+        var items = new List<StandaloneReplayListItem>();
+        foreach (var h in raw)
+        {
+            if (hide && h.MaxPot < GameConstants.HighPotChipsThreshold)
+                continue;
+            var bg = h.MaxPot > GameConstants.HighPotChipsThreshold ? "#2a4a32" : "#1a2230";
+            items.Add(new StandaloneReplayListItem
             {
                 Id = h.Id,
                 Name = h.HandName,
                 ReplayJson = h.HandHistoryJson,
-                DisplayLabel = $"{FormatReplayTime(h.HandTimeIso)} - {h.HandName}"
-            })
-            .ToListAsync();
-        ReplayHandsListBox.ItemsSource = hands;
-        ReplayHandsListBox.SelectedIndex = hands.Count > 0 ? 0 : -1;
+                DisplayLabel = $"{FormatReplayTime(h.HandTimeIso)} — {h.HandName} · max pot {h.MaxPot}",
+                MaxPot = h.MaxPot,
+                RowBackground = bg
+            });
+        }
+
+        ReplayHandsListBox.ItemsSource = items;
+        ReplayHandsListBox.SelectedIndex = items.Count > 0 ? 0 : -1;
     }
 
-    private async void OnDeleteReplayClick(object? sender, RoutedEventArgs e)
+    private async Task LoadSeriesListAsync()
+    {
+        PokerDbBootstrap.EnsureInitialized();
+        await using var db = PokerDbBootstrap.CreateContext();
+        var series = (await db.TournamentSeries.AsNoTracking().ToListAsync())
+            .OrderByDescending(s => s.CreatedAt)
+            .ToList();
+        var items = series.Select(s => new TournamentSeriesListItem
+        {
+            Id = s.Id,
+            SeriesName = s.Name,
+            DisplayLabel = $"{FormatReplayTime(s.CreatedAt.ToString("O"))} — {s.Name}"
+        }).ToList();
+        ReplaySeriesListBox.ItemsSource = items;
+        ReplaySeriesListBox.SelectedIndex = items.Count > 0 ? 0 : -1;
+        if (items.Count > 0)
+        {
+            await LoadSeriesHandsAsync(items[0].Id);
+            await RefreshSeriesStatsAsync(items[0].Id);
+        }
+        else
+        {
+            ReplaySeriesHandsListBox.ItemsSource = Array.Empty<SeriesHandReplayItem>();
+            SeriesStatsTextBlock.Text = string.Empty;
+        }
+    }
+
+    private async Task RefreshSeriesStatsAsync(int seriesId)
+    {
+        PokerDbBootstrap.EnsureInitialized();
+        await using var db = PokerDbBootstrap.CreateContext();
+        var s = await db.TournamentSeries.AsNoTracking().FirstOrDefaultAsync(x => x.Id == seriesId);
+        SeriesStatsTextBlock.Text = s is null ? string.Empty : TournamentSeriesStats.FormatStatsForDisplay(s);
+    }
+
+    private static string SanitizeSeriesFileStem(string name)
+    {
+        foreach (var c in Path.GetInvalidFileNameChars())
+            name = name.Replace(c, '_');
+        var t = name.Trim();
+        return string.IsNullOrEmpty(t) ? "series" : t;
+    }
+
+    private async void OnExportSeriesCsvClick(object? sender, RoutedEventArgs e)
     {
         ReplayErrorTextBlock.Text = string.Empty;
-        if (sender is not Control { DataContext: ReplayHandListItem item })
+        if (ReplaySeriesListBox.SelectedItem is not TournamentSeriesListItem sel)
+        {
+            ReplayErrorTextBlock.Text = "Select a tournament series first.";
+            return;
+        }
+
+        var top = TopLevel.GetTopLevel(this);
+        if (top is null)
+            return;
+
+        var stem = SanitizeSeriesFileStem(sel.SeriesName);
+        var file = await top.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export tournament series details",
+            SuggestedFileName = $"{stem}_details.csv",
+            FileTypeChoices =
+            [
+                new FilePickerFileType("CSV")
+                {
+                    Patterns = ["*.csv"]
+                }
+            ]
+        });
+        if (file is null)
+            return;
+
+        try
+        {
+            var csv = await SeriesDetailsCsvExporter.BuildCsvAsync(sel.Id);
+            await using var stream = await file.OpenWriteAsync();
+            await using var writer = new StreamWriter(stream);
+            await writer.WriteAsync(csv);
+        }
+        catch
+        {
+            ReplayErrorTextBlock.Text = "Export failed.";
+        }
+    }
+
+    private async void OnDeleteSeriesClick(object? sender, RoutedEventArgs e)
+    {
+        ReplayErrorTextBlock.Text = string.Empty;
+        if (ReplaySeriesListBox.SelectedItem is not TournamentSeriesListItem sel)
+        {
+            ReplayErrorTextBlock.Text = "Select a tournament series first.";
+            return;
+        }
+
+        try
+        {
+            await HandPersistence.DeleteTournamentSeriesAsync(sel.Id);
+            SeriesStatsTextBlock.Text = string.Empty;
+            await LoadSeriesListAsync();
+        }
+        catch
+        {
+            ReplayErrorTextBlock.Text = "Failed to delete series.";
+        }
+    }
+
+    private async Task LoadSeriesHandsAsync(int seriesId)
+    {
+        var hide = HideSmallPotReplaysCheckBox.IsChecked == true;
+        await using var db = PokerDbBootstrap.CreateContext();
+        var raw = await db.SavedHands
+            .AsNoTracking()
+            .Where(h => h.TournamentSeriesId == seriesId)
+            .OrderByDescending(h => h.HandTimeIso)
+            .ToListAsync();
+        var items = new List<SeriesHandReplayItem>();
+        foreach (var h in raw)
+        {
+            if (hide && h.MaxPot < GameConstants.HighPotChipsThreshold)
+                continue;
+            var bg = h.MaxPot > GameConstants.HighPotChipsThreshold ? "#2a4a32" : "#1a2230";
+            items.Add(new SeriesHandReplayItem
+            {
+                Id = h.Id,
+                Name = h.HandName,
+                ReplayJson = h.HandHistoryJson,
+                DisplayLabel = $"{FormatReplayTime(h.HandTimeIso)} — {h.HandName} · max pot {h.MaxPot}",
+                MaxPot = h.MaxPot,
+                RowBackground = bg
+            });
+        }
+
+        ReplaySeriesHandsListBox.ItemsSource = items;
+        ReplaySeriesHandsListBox.SelectedIndex = items.Count > 0 ? 0 : -1;
+    }
+
+    private async void OnDeleteStandaloneReplayClick(object? sender, RoutedEventArgs e)
+    {
+        ReplayErrorTextBlock.Text = string.Empty;
+        if (sender is not Control { DataContext: StandaloneReplayListItem item })
         {
             ReplayErrorTextBlock.Text = "Could not resolve selected replay.";
             return;
@@ -612,12 +1367,45 @@ public partial class MainMenuWindow : Window
             if (hand is null)
             {
                 ReplayErrorTextBlock.Text = "Replay no longer exists.";
-                await LoadReplayListAsync();
+                await LoadStandaloneReplaysAsync();
                 return;
             }
             db.SavedHands.Remove(hand);
             await db.SaveChangesAsync();
-            await LoadReplayListAsync();
+            await LoadStandaloneReplaysAsync();
+        }
+        catch
+        {
+            ReplayErrorTextBlock.Text = "Failed to delete replay.";
+        }
+    }
+
+    private async void OnDeleteSeriesHandReplayClick(object? sender, RoutedEventArgs e)
+    {
+        ReplayErrorTextBlock.Text = string.Empty;
+        if (sender is not Control { DataContext: SeriesHandReplayItem item })
+        {
+            ReplayErrorTextBlock.Text = "Could not resolve selected replay.";
+            return;
+        }
+
+        var seriesId = ReplaySeriesListBox.SelectedItem is TournamentSeriesListItem s ? s.Id : 0;
+        try
+        {
+            PokerDbBootstrap.EnsureInitialized();
+            await using var db = PokerDbBootstrap.CreateContext();
+            var hand = await db.SavedHands.FirstOrDefaultAsync(h => h.Id == item.Id);
+            if (hand is null)
+            {
+                ReplayErrorTextBlock.Text = "Replay no longer exists.";
+                if (seriesId != 0)
+                    await LoadSeriesHandsAsync(seriesId);
+                return;
+            }
+            db.SavedHands.Remove(hand);
+            await db.SaveChangesAsync();
+            if (seriesId != 0)
+                await LoadSeriesHandsAsync(seriesId);
         }
         catch
         {
@@ -632,14 +1420,14 @@ public partial class MainMenuWindow : Window
         return handTimeIso;
     }
 
-    private MainWindow BuildReplayView(ReplayHandListItem item)
+    private MainWindow BuildReplayView(string replayJson)
     {
         var defaultBuyIn = GameConstants.DefaultBuyIn;
         var defaultSmallBlind = GameConstants.DefaultSmallBlind;
         var bots = new List<BotSetup>();
         try
         {
-            using var doc = System.Text.Json.JsonDocument.Parse(item.ReplayJson);
+            using var doc = System.Text.Json.JsonDocument.Parse(replayJson);
             if (doc.RootElement.TryGetProperty("tournament", out var t))
             {
                 if (t.TryGetProperty("buy_in", out var buyInEl) && buyInEl.TryGetInt32(out var buyIn))
@@ -677,12 +1465,46 @@ public partial class MainMenuWindow : Window
         if (bots.Count == 0)
             bots.Add(new BotSetup("ReplayBot", BotType.RandomBotPlayer));
 
-        var config = new GameSetupConfig(defaultBuyIn, defaultSmallBlind, bots);
+        var config = new GameSetupConfig(
+            defaultBuyIn,
+            defaultSmallBlind,
+            bots,
+            SpectatorSeriesMode: !ReplayIncludesHumanPlayer(replayJson));
         var view = new MainWindow(config, isReplayMode: true);
         view.ReplayHandFinished += OnReplayHandFinished;
         view.ExitToMenuRequested += OnReplayExitRequested;
-        view.LoadReplay(item.ReplayJson);
+        view.LoadReplay(replayJson);
         return view;
+    }
+
+    private static bool ReplayIncludesHumanPlayer(string replayJson)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(replayJson);
+            if (!doc.RootElement.TryGetProperty("events", out var events) || events.ValueKind != System.Text.Json.JsonValueKind.Array)
+                return true;
+            foreach (var ev in events.EnumerateArray())
+            {
+                if (!ev.TryGetProperty("ev", out var evType) || evType.GetString() != "replay_header")
+                    continue;
+                if (!ev.TryGetProperty("players", out var players) || players.ValueKind != System.Text.Json.JsonValueKind.Array)
+                    return true;
+                foreach (var p in players.EnumerateArray())
+                {
+                    var typeText = p.TryGetProperty("player_type", out var pt) ? pt.GetString() ?? "" : "";
+                    if (string.Equals(typeText, "HUMAN", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+
+                return false;
+            }
+        }
+        catch
+        {
+        }
+
+        return true;
     }
 
     private void OnReplayHandFinished(string winnerName)

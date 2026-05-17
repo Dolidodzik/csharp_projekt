@@ -6,4 +6,6 @@ public static class GameConstants
     public const int DefaultSmallBlind = 25;
 
     public const string HumanPlayerName = "The Player";
+
+    public const int HighPotChipsThreshold = 7000;
 }

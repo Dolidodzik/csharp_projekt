@@ -3,6 +3,16 @@ using TexasHoldem.Logic.Players;
 
 namespace PokerApp;
 
+/// <summary>
+/// gracz oparty o model językowy — zamiast tabel GTO pyta API i parsuje ostatnią linię odpowiedzi.
+/// </summary>
+/// <remarks>
+/// każda akcja zapisuje prompt i thought do historii JSON — to podstawa analizy modeli w powtórce.
+/// przy błędzie API lub nieparsowalnej odpowiedzi bot pasuje (bezpieczny fallback, żeby nie zawiesić stołu).
+/// </remarks>
+/// <seealso cref="LlmPrompts"/>
+/// <seealso cref="OpenAiCompatClient"/>
+/// <seealso cref="IGameUi"/>
 public sealed class LlmBotPlayer : BasePlayer
 {
     private readonly IGameUi _ui;
@@ -13,6 +23,12 @@ public sealed class LlmBotPlayer : BasePlayer
     private IReadOnlyList<Card> _currentBoard = Array.Empty<Card>();
     private string _currentStreet = "Pre-Flop";
 
+    /// <summary>jeden bot = jeden klient HTTP — różne presety mogą wskazywać na różne modele/endpointy.</summary>
+    /// <param name="name">etykieta przy stole i w JSON.</param>
+    /// <param name="ui">implementacja <see cref="IGameUi"/> — zwykle <see cref="MainWindowViewModel"/>.</param>
+    /// <param name="client">skonfigurowany pod preset z bazy.</param>
+    /// <param name="personality">opcjonalny styl gry wstrzykiwany do system promptu.</param>
+    /// <param name="preset">metadane do zapisu w replay_header (nie do requestów — URL/klucz są w kliencie).</param>
     public LlmBotPlayer(string name, IGameUi ui, OpenAiCompatClient client, LlmPersonalitySnapshot? personality = null, OpenAiPresetSnapshot? preset = null)
     {
         Name = name;
@@ -83,6 +99,8 @@ public sealed class LlmBotPlayer : BasePlayer
         });
     }
 
+    /// <summary>buduje prompt, czeka na API, parsuje ostatnią linię jako kod akcji (FOLD/CHECK/CALL/RAISE).</summary>
+    /// <remarks>asynchroniczne API wołane synchronicznie — silnik NuGet nie wspiera async GetTurn.</remarks>
     public override PlayerAction GetTurn(IGetTurnContext context)
     {
         _ui.SetCurrentTurn(Name);

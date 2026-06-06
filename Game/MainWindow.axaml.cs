@@ -6,6 +6,15 @@ using Avalonia.Input;
 
 namespace PokerApp;
 
+/// <summary>
+/// widok stołu (UserControl) — hostowany w MainMenuWindow w GameHost.
+/// trzyma pętlę turniejową, bo code-behind ma już podpięte eventy z XAML.
+/// </summary>
+/// <remarks>
+/// HandFinishedAsync i TournamentFinished to hooki dla menu — zapis ręki i powrót po turnieju
+/// bez sztywnego coupling MainWindow → SQLite.
+/// </remarks>
+/// <seealso cref="MainWindowViewModel"/>
 public partial class MainWindow : UserControl
 {
     private bool _loopStarted;
@@ -31,6 +40,11 @@ public partial class MainWindow : UserControl
 
     public MainWindowViewModel? ViewModel => DataContext as MainWindowViewModel;
 
+    /// <summary>
+    /// pętla: ręka → callback zapisu → następna ręka, aż <see cref="HandSummary.TournamentFinished"/>.
+    /// w trybie powtórki nic nie robi — tam kroki idą przez AdvanceReplay.
+    /// </summary>
+    /// <param name="cancellationToken">łączone z przyciskiem wyjścia z menu.</param>
     public async Task StartGameLoopAsync(CancellationToken cancellationToken = default)
     {
         if (_isReplayMode)

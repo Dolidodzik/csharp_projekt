@@ -10,6 +10,17 @@ using TexasHoldem.Logic.Players;
 
 namespace PokerApp;
 
+/// <summary>
+/// serce stołu — łączy MVVM, <see cref="IGameUi"/> i logikę powtórki w jednej klasie.
+/// świadomie duży plik: gracze wołają UI w trakcie rozdania, więc rozdzielenie na wiele VM-ów
+/// skomplikowałoby synchronizację wątków bez realnej korzyści na tym etapie projektu.
+/// </summary>
+/// <remarks>
+/// tryb gry i tryb powtórki dzielą ten sam widok — <see cref="IsReplayMode"/> przełącza
+/// źródło stanu (silnik vs kroki z JSON).
+/// </remarks>
+/// <seealso cref="MainWindow"/>
+/// <seealso cref="TournamentSession"/>
 public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
 {
     private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = false };
@@ -49,6 +60,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
 
     public int CurrentHandBigBlind => _session?.CurrentHandBigBlind ?? _config.BigBlind;
 
+    /// <summary>buduje miejsca przy stole z <see cref="GameSetupConfig"/> — bez ludzkiego miejsca w trybie serii.</summary>
+    /// <param name="config">parametry przekazane z menu lub domyślne testowe.</param>
     public MainWindowViewModel(GameSetupConfig config)
     {
         _config = config;
@@ -257,6 +270,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
         });
     }
 
+    /// <summary>
+    /// skleja zebrane zdarzenia w jeden dokument JSON do zapisu w SQLite.
+    /// dopina replay_header (skład stołu) i hand_end — bez tego powtórka nie wie kto grał.
+    /// </summary>
+    /// <param name="summary">wynik ostatniej ręki z <see cref="TournamentSession"/>.</param>
+    /// <returns>gotowy string do kolumny hand_history_json.</returns>
     public string BuildHandReplayJson(HandSummary summary)
     {
         lock (_replayLock)
@@ -460,6 +479,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
         });
     }
 
+    /// <summary>
+    /// tworzy graczy (<see cref="HumanPlayer"/>, <see cref="RandomBotPlayer"/>, <see cref="LlmBotPlayer"/>)
+    /// i nową <see cref="TournamentSession"/>. wołane raz na turniej, nie na każdą rękę.
+    /// </summary>
     public void InitializeTournament()
     {
         IsReplayMode = false;
@@ -515,6 +538,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
         SyncSeatsFromSummary(Seats.Select(s => (s.Name, s.Chips)).ToList());
     }
 
+    /// <summary>
+    /// ładuje zapisaną rękę — parsuje events, buduje kroki <see cref="AdvanceReplay"/>.
+    /// w powtórce wszystkie karty widoczne od startu (wymaganie z podręcznika).
+    /// </summary>
+    /// <param name="replayJson">zawartość hand_history_json z bazy.</param>
     public void InitializeReplay(string replayJson)
     {
         IsReplayMode = true;
@@ -763,6 +791,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IGameUi
         });
     }
 
+    /// <summary>deleguje rozdania do <see cref="TournamentSession"/> na wątku puli — UI nie blokuje się na silniku.</summary>
+    /// <param name="cancellationToken">anulowanie z menu (wyjście z gry / serii).</param>
+    /// <returns>podsumowanie ręki do overlayu i zapisu.</returns>
+    /// <exception cref="InvalidOperationException">gdy turniej nie zainicjalizowany lub ręka już trwa.</exception>
     public async Task<HandSummary> PlayNextHandAsync(CancellationToken cancellationToken = default)
     {
         if (_session is null)

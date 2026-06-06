@@ -27,3 +27,5 @@ packages/
 .env.*
 *.log
 dist/
+docfx_project/api/
+docfx_project/_site/

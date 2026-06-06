@@ -3,8 +3,22 @@ using System.Text.Json;
 
 namespace PokerApp;
 
+/// <summary>
+/// helpery do JSON powtórek — parsowanie bez pełnego modelu DTO, bo schema eventów jest luźna.
+/// </summary>
+/// <remarks>
+/// wszystkie metody łapią wyjątki i zwracają bezpieczne domyślne — stara baza lub ręcznie edytowany JSON
+/// nie powinien wywalić listy powtórek.
+/// </remarks>
+/// <seealso cref="HandPersistence"/>
+/// <seealso cref="TournamentSeriesStats"/>
 public static class ReplayJsonUtil
 {
+    /// <summary>
+    /// szuka max pot w zdarzeniach action — zapisujemy przy Save, żeby filtrować listę bez deserializacji całości.
+    /// </summary>
+    /// <param name="handHistoryJson">pełny dokument z kolumny hand_history_json.</param>
+    /// <returns>0 gdy brak action lub zły JSON.</returns>
     public static int MaxPotFromReplayJson(string handHistoryJson)
     {
         try
@@ -32,6 +46,9 @@ public static class ReplayJsonUtil
         }
     }
 
+    /// <summary>liczy akcje LLM z niepustym prompt_before_action — metryka serii turniejów.</summary>
+    /// <param name="handHistoryJson">historia jednej ręki.</param>
+    /// <returns>liczba promptów w tej ręce.</returns>
     public static int CountPromptsFromReplayJson(string handHistoryJson)
     {
         try

@@ -4,6 +4,12 @@ using TexasHoldem.Logic.Players;
 
 namespace PokerApp;
 
+/// <summary>wynik jednej rozegranej ręki — przekazywany do zapisu i overlayu końca rozdania.</summary>
+/// <param name="HandNumber">która ręka w turnieju.</param>
+/// <param name="Winners">kto zgarnął pulę (może być remis).</param>
+/// <param name="Stacks">stacki wszystkich graczy po rozdaniu.</param>
+/// <param name="TournamentFinished">true gdy został jeden gracz z żetonami.</param>
+/// <param name="TournamentWinner">nazwa zwycięzcy turnieju, null jeśli turniej trwa.</param>
 public sealed record HandSummary(
     int HandNumber,
     IReadOnlyList<string> Winners,
@@ -11,6 +17,16 @@ public sealed record HandSummary(
     bool TournamentFinished,
     string? TournamentWinner);
 
+/// <summary>
+/// opakowuje TexasHoldemGameEngine w tryb turniejowy — wiele rąk, rotacja buttona, blindy.
+/// </summary>
+/// <remarks>
+/// pakiet NuGet nie wystawia publicznego API turniejowego (InternalPlayer, HandLogic są internal),
+/// więc cała klasa opiera się na refleksji. to świadomy kompromis: aktualizacja silnika może wymagać poprawek tutaj,
+/// ale nie przepisujemy zasad Hold'em od zera.
+/// </remarks>
+/// <seealso cref="TournamentBlindSchedule"/>
+/// <seealso cref="MainWindowViewModel.InitializeTournament"/>
 public sealed class TournamentSession
 {
     private static readonly Assembly LogicAssembly = typeof(TexasHoldemGame).Assembly;
@@ -40,10 +56,19 @@ public sealed class TournamentSession
     private int _handNumber;
     private bool _endGameSent;
 
+    /// <value>big blind bieżącej ręki — rośnie w serii turniejów (escalatingBlinds).</value>
     public int CurrentHandBigBlind { get; private set; }
 
+    /// <value>numer następnej ręki — używany w UI przed startem rozdania.</value>
     public int UpcomingHandNumber => _handNumber + 1;
 
+    /// <summary>
+    /// startuje turniej: opakowuje każdego <see cref="IPlayer"/> w InternalPlayer i woła StartGame.
+    /// </summary>
+    /// <param name="players">kolejność miejsc przy stole — nie zmienia się w trakcie turnieju.</param>
+    /// <param name="startingStack">buy-in, jeśli gracz ma BuyIn == -1.</param>
+    /// <param name="baseSmallBlind">mała ciemna z konfiguracji stołu.</param>
+    /// <param name="escalatingBlinds">true w trybie serii botów — blindy rosną co N rąk.</param>
     public TournamentSession(IReadOnlyList<IPlayer> players, int startingStack, int baseSmallBlind, bool escalatingBlinds = false)
     {
         _baseSmallBlind = baseSmallBlind;
@@ -68,8 +93,19 @@ public sealed class TournamentSession
             ListAdd(_shifted, ListGet(_master, i));
     }
 
+    /// <value>true gdy co najwyżej jeden gracz ma stack &gt; 0.</value>
     public bool IsFinished => AliveCount(_master) <= 1;
 
+    /// <summary>
+    /// rozgrywa jedną rękę: filtruje busted graczy, przesuwa buttona, liczy blindy, woła HandLogic.Play().
+    /// </summary>
+    /// <remarks>
+    /// wywoływane z wątku puli przez <see cref="MainWindowViewModel.PlayNextHandAsync"/> —
+    /// callbacki graczy muszą same zsynchronizować UI.
+    /// </remarks>
+    /// <param name="cancellationToken">anulowanie serii / wyjście z gry.</param>
+    /// <returns>podsumowanie ręki i ewentualny koniec turnieju.</returns>
+    /// <exception cref="InvalidOperationException">gdy turniej skończony albo nikt nie może grać.</exception>
     public HandSummary PlayNextHand(CancellationToken cancellationToken)
     {
         if (IsFinished)

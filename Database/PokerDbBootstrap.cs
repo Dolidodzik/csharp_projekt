@@ -2,12 +2,24 @@ using Microsoft.EntityFrameworkCore;
 
 namespace PokerApp;
 
+/// <summary>
+/// jednorazowa inicjalizacja SQLite przy starcie aplikacji — wołane z <see cref="App.OnFrameworkInitializationCompleted"/>.
+/// </summary>
+/// <remarks>
+/// zamiast migracji EF trzymamy plik .ver obok bazy — przy zmianie schematu kasujemy starą bazę.
+/// brutalne, ale dla lokalnej apki desktopowej akceptowalne (patrz PODRECZNIK, sekcja przypadki brzegowe).
+/// </remarks>
+/// <seealso cref="PokerDbContext"/>
 public static class PokerDbBootstrap
 {
     private const string SchemaVersion = "3";
 
     private static DbContextOptions<PokerDbContext>? _options;
 
+    /// <summary>
+    /// tworzy katalog, sprawdza wersję schematu, EnsureCreated.
+    /// bezpieczne wołać wielokrotnie — opcje cache'owane w _options.
+    /// </summary>
     public static void EnsureInitialized()
     {
         if (_options != null)
@@ -50,6 +62,8 @@ public static class PokerDbBootstrap
             """);
     }
 
+    /// <summary>fabryka kontekstu — każde wywołanie = nowy DbContext (krótkie życie, using await).</summary>
+    /// <returns>gotowy <see cref="PokerDbContext"/> z tą samą ścieżką SQLite.</returns>
     public static PokerDbContext CreateContext()
     {
         if (_options == null)
@@ -57,6 +71,7 @@ public static class PokerDbBootstrap
         return new PokerDbContext(_options!);
     }
 
+    /// <remarks>POKERAPP_DB nadpisuje domyślną ścieżkę — przydatne przy testach i backupie bazy.</remarks>
     private static string ResolveSqlitePath()
     {
         var env = Environment.GetEnvironmentVariable("POKERAPP_DB");

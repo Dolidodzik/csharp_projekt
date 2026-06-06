@@ -6,6 +6,14 @@ using System.Text.Json.Serialization;
 
 namespace PokerApp;
 
+/// <summary>
+/// cienki klient pod endpoint /chat/completions — działa z OpenAI, Azure, lokalnym llama.cpp itd.
+/// </summary>
+/// <remarks>
+/// retry do 10 prób, bo modele lokalne i darmowe API często zwracają 429 lub timeout.
+/// logi idą na Console — przy debugowaniu serii LLM wystarczy patrzeć w terminal.
+/// </remarks>
+/// <seealso cref="LlmBotPlayer"/>
 public sealed class OpenAiCompatClient
 {
     private readonly HttpClient _http;
@@ -23,6 +31,11 @@ public sealed class OpenAiCompatClient
         _http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
     }
 
+    /// <summary>wysyła jedno zapytanie chat — bez streamingu, bo parsujemy całą odpowiedź naraz.</summary>
+    /// <param name="systemPrompt">osobowość + reguły formatu odpowiedzi.</param>
+    /// <param name="userPrompt">stan stołu z <see cref="LlmPrompts"/>.</param>
+    /// <param name="cancellationToken">przerwanie przy wyjściu z gry.</param>
+    /// <returns>treść assistant message albo null po wyczerpaniu prób.</returns>
     public async Task<string?> CompleteChatAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken = default)
     {
         var payload = new ChatPayload
